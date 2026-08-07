@@ -10,7 +10,9 @@ Monitors [Zoraxy](https://github.com/tobychui/zoraxy) reverse-proxy logs for:
 
 Alerts via **Discord**, **Telegram**, generic webhook, and container logs.
 
-Image: `ghcr.io/paulg67/zoraxy-guard:latest`
+Image (after CI is enabled): `ghcr.io/paulg67/zoraxy-guard:latest`
+
+Until the GHCR image is published, build from this repo on Unraid (see below).
 
 ## Unraid install (Docker Compose Manager)
 
@@ -18,18 +20,18 @@ Image: `ghcr.io/paulg67/zoraxy-guard:latest`
    ```bash
    mkdir -p /mnt/user/appdata/zoraxy-guard/data/lists
    mkdir -p /mnt/user/appdata/zoraxy-guard/data/feed-cache
-   ```
-2. Download default config:
-   ```bash
+   cd /mnt/user/appdata
+   git clone https://github.com/PaulG67/zoraxy-guard.git zoraxy-guard-src
    curl -fsSL https://raw.githubusercontent.com/PaulG67/zoraxy-guard/main/config.example.yaml \
      -o /mnt/user/appdata/zoraxy-guard/config.yaml
    ```
-3. Edit `config.yaml` (domains under `sensitive_hosts`, Discord webhook optional).
-4. Stack / compose:
+2. Edit `config.yaml` (domains under `sensitive_hosts`, Discord webhook optional).
+3. Stack / compose (build from GitHub, then later switch to GHCR image):
    ```yaml
    services:
      zoraxy-guard:
-       image: ghcr.io/paulg67/zoraxy-guard:latest
+       build: https://github.com/PaulG67/zoraxy-guard.git#main
+       # image: ghcr.io/paulg67/zoraxy-guard:latest
        container_name: zoraxy-guard
        restart: unless-stopped
        environment:
@@ -42,18 +44,24 @@ Image: `ghcr.io/paulg67/zoraxy-guard:latest`
          - /mnt/user/appdata/zoraxy-guard/config.yaml:/config/config.yaml:ro
          - /mnt/user/appdata/zoraxy-guard/data:/data
    ```
-5. Adjust the **Zoraxy log path** if yours differs.
-6. Start the stack. Check logs: `docker logs -f zoraxy-guard`
+4. Adjust the **Zoraxy log path** if yours differs.
+5. Start the stack. Check logs: `docker logs -f zoraxy-guard`
 
-### Unraid “Add Container” (XML template)
+### Publish prebuilt image (optional)
 
-Import `unraid/zoraxy-guard.xml` from this repo (Docker → Add Container → Template), or paste Repository:
+The GitHub Actions workflow lives at [`devtools/docker-publish.yml`](devtools/docker-publish.yml). To enable automatic GHCR builds:
 
-`ghcr.io/paulg67/zoraxy-guard:latest`
+```bash
+gh auth refresh -h github.com -s workflow
+mkdir -p .github/workflows
+mv devtools/docker-publish.yml .github/workflows/
+git add .github/workflows/docker-publish.yml
+git commit -m "Enable GHCR publish workflow"
+git push
+```
 
-Map paths as in the template.
+Then make the package **public**: GitHub → Packages → zoraxy-guard → Package settings → Change visibility.
 
-> First image pull may need GHCR public access. If the package is private, make it **public** under GitHub → Packages → Package settings.
 
 ## Threat lists / databases
 
