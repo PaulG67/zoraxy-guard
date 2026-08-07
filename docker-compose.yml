@@ -1,7 +1,8 @@
+# docker-compose for Unraid / local: pull-only (Force update friendly)
 services:
   zoraxy-guard:
-    build: .
     image: ghcr.io/paulg67/zoraxy-guard:latest
+    pull_policy: always
     container_name: zoraxy-guard
     restart: unless-stopped
     ports:
@@ -11,15 +12,8 @@ services:
       ZORAXY_GUARD_CONFIG: /config/config.yaml
       WEB_ENABLED: "true"
       WEB_PORT: "8787"
-      # Set a password for the GUI (recommended if exposed beyond LAN)
       WEB_PASSWORD: "change-me"
-      # DISCORD_WEBHOOK: "https://discord.com/api/webhooks/..."
-      # PUSHOVER_USER_KEY: ""
-      # PUSHOVER_API_TOKEN: ""
-      # KNOWN_LISTS: "ipsum-level5,blocklist-de-apache,feodo-ip"
-      # ALLOWLIST_IPS: "192.168.0.0/16,10.0.0.0/8"
     volumes:
       - /mnt/user/appdata/zoraxy/log:/logs:ro
-      # Config must be writable so the GUI can save (not :ro)
       - /mnt/user/appdata/zoraxy-guard/config.yaml:/config/config.yaml
       - /mnt/user/appdata/zoraxy-guard/data:/data

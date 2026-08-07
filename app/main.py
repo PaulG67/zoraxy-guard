@@ -243,7 +243,7 @@ def run(config_path: str) -> None:
                     break
                 for alert in det.process(event):
                     if alt.send(alert, now):
-                        runtime.note_alert(alert.severity, alert.title, alert.body)
+                        runtime.note_alert(alert)
 
         save_counter += 1
         if save_counter >= 10:

@@ -4,7 +4,9 @@ Monitors [Zoraxy](https://github.com/tobychui/zoraxy) reverse-proxy logs for exp
 
 **Web GUI:** port **8787** · Alerts: Discord, Telegram, Pushover, webhook
 
-Image tag (local or GHCR): `ghcr.io/paulg67/zoraxy-guard:latest`
+Image tag: `ghcr.io/paulg67/zoraxy-guard:latest` (auto-build via GitHub Actions on push to `main`)
+
+**Unraid updates:** Docker → zoraxy-guard → **Force update** (pull latest). No reinstall script needed once the image is published.
 
 ## Unraid – Vorlage (Docker → Container hinzufügen)
 

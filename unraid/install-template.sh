@@ -26,22 +26,27 @@ mkdir -p "${TEMPLATE_DIR}"
 curl -fsSL "${RAW_BASE}/unraid/my-zoraxy-guard.xml" -o "${TEMPLATE_DIR}/my-zoraxy-guard.xml"
 echo "    wrote ${TEMPLATE_DIR}/my-zoraxy-guard.xml"
 
-echo "==> 3/4 Docker-Image bauen (lokal, damit Template ohne GHCR-Pull startet)"
-if command -v git >/dev/null 2>&1; then
-  if [[ -d "${SRC_DIR}/.git" ]]; then
-    git -C "${SRC_DIR}" pull --ff-only || true
-  else
-    rm -rf "${SRC_DIR}"
-    git clone --depth 1 "${REPO}" "${SRC_DIR}"
-  fi
+echo "==> 3/4 Docker-Image"
+# Prefer pull (Force update later); build only if pull fails
+if docker pull "${IMAGE}" 2>/dev/null; then
+  echo "    pulled ${IMAGE}"
 else
-  mkdir -p "${SRC_DIR}"
-  curl -fsSL "https://codeload.github.com/PaulG67/zoraxy-guard/tar.gz/refs/heads/main" \
-    | tar -xz -C "${SRC_DIR}" --strip-components=1
+  echo "    pull failed — building locally from GitHub"
+  if command -v git >/dev/null 2>&1; then
+    if [[ -d "${SRC_DIR}/.git" ]]; then
+      git -C "${SRC_DIR}" pull --ff-only || true
+    else
+      rm -rf "${SRC_DIR}"
+      git clone --depth 1 "${REPO}" "${SRC_DIR}"
+    fi
+  else
+    mkdir -p "${SRC_DIR}"
+    curl -fsSL "https://codeload.github.com/PaulG67/zoraxy-guard/tar.gz/refs/heads/main" \
+      | tar -xz -C "${SRC_DIR}" --strip-components=1
+  fi
+  docker build -t "${IMAGE}" "${SRC_DIR}"
+  echo "    tagged ${IMAGE}"
 fi
-
-docker build -t "${IMAGE}" "${SRC_DIR}"
-echo "    tagged ${IMAGE}"
 
 echo "==> 4/4 Fertig"
 echo

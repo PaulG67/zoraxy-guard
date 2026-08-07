@@ -24,6 +24,7 @@ from werkzeug.serving import make_server
 from . import runtime as rt
 from .detectors import Alert
 from .envconfig import apply_env_overrides
+from .parser import LogEvent
 from .catalog import (
     catalog_as_feed_map,
     get_active_catalog,
@@ -307,10 +308,22 @@ def create_app(config_path: str) -> Flask:
             title="Test-Alarm aus der Web-UI",
             body="Wenn du das siehst, funktioniert die Alarmierung (Pushover/Discord/Telegram).",
             fingerprint=f"ui-test:{time.time()}",
+            event=LogEvent(
+                raw="[UI-TEST] simulated Zoraxy request line",
+                timestamp=None,
+                kind="request",
+                router="host-http",
+                origin="test.local",
+                client="203.0.113.50",
+                user_agent="ZoraxyGuard-WebUI/1.0",
+                method="GET",
+                path="/test-alert",
+                status=200,
+            ),
         )
         try:
             if rt.RUNTIME.alerter.send(alert, time.time()):
-                rt.RUNTIME.note_alert(alert.severity, alert.title, alert.body)
+                rt.RUNTIME.note_alert(alert)
             flash("Test-Alarm gesendet (siehe Channels + Log).", "ok")
         except Exception as exc:
             flash(f"Test fehlgeschlagen: {exc}", "error")

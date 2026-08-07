@@ -64,19 +64,34 @@
 <div class="card" style="margin-top:14px">
   <h2>Letzte Alarme</h2>
   {% if snap.recent_alerts %}
-  <table>
-    <thead><tr><th>Zeit</th><th>Severity</th><th>Titel</th><th>Detail</th></tr></thead>
-    <tbody>
-      {% for a in snap.recent_alerts %}
-      <tr>
-        <td class="muted">{{ time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(a.ts)) if a.ts else '—' }}</td>
-        <td class="sev {{ a.severity }}">{{ a.severity }}</td>
-        <td>{{ a.title }}</td>
-        <td class="muted">{{ a.body }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="alert-list">
+    {% for a in snap.recent_alerts %}
+    <details class="alert-item">
+      <summary>
+        <span class="muted mono">{{ time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(a.ts)) if a.ts else '—' }}</span>
+        <span class="sev {{ a.severity }}">{{ a.severity }}</span>
+        <span class="alert-title">{{ a.title }}</span>
+        <span class="muted alert-summary">{{ a.summary or a.body }}</span>
+      </summary>
+      <div class="alert-detail">
+        {% if a.details %}
+        <table class="detail-table">
+          <tbody>
+            {% for key, val in a.details.items() %}
+            <tr>
+              <th>{{ key }}</th>
+              <td>{% if key == 'Log-Zeile' %}<code class="logline">{{ val }}</code>{% else %}{{ val }}{% endif %}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="muted">{{ a.body }}</p>
+        {% endif %}
+      </div>
+    </details>
+    {% endfor %}
+  </div>
   {% else %}
   <p class="muted">Noch keine Alarme in dieser Laufzeit.</p>
   {% endif %}
