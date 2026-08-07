@@ -10,6 +10,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 
+from .fileio import write_text_atomic
+
 log = logging.getLogger("zoraxy-guard.catalog")
 
 # Bundled catalog in the image / git tree
@@ -69,12 +71,8 @@ def load_cached() -> Optional[dict]:
 
 
 def save_cache(data: dict) -> None:
-    CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    tmp = str(CACHE_PATH) + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(data, fh, indent=2, ensure_ascii=False)
-        fh.write("\n")
-    os.replace(tmp, CACHE_PATH)
+    text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    write_text_atomic(str(CACHE_PATH), text)
 
 
 def load_meta() -> dict:
@@ -88,11 +86,7 @@ def load_meta() -> dict:
 
 
 def save_meta(meta: dict) -> None:
-    META_PATH.parent.mkdir(parents=True, exist_ok=True)
-    tmp = str(META_PATH) + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(meta, fh, indent=2)
-    os.replace(tmp, META_PATH)
+    write_text_atomic(str(META_PATH), json.dumps(meta, indent=2))
 
 
 def get_active_catalog() -> dict:

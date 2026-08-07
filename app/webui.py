@@ -24,6 +24,7 @@ from werkzeug.serving import make_server
 from . import runtime as rt
 from .detectors import Alert
 from .envconfig import apply_env_overrides
+from .fileio import write_text
 from .parser import LogEvent
 from .catalog import (
     catalog_as_feed_map,
@@ -49,11 +50,9 @@ def _load_yaml_file(path: str) -> dict:
 def _save_yaml_file(path: str, cfg: dict) -> None:
     data = _public_cfg(cfg)
     text = yaml.safe_dump(data, sort_keys=False, allow_unicode=True, default_flow_style=False)
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        fh.write(text)
-    os.replace(tmp, path)
+    # Direct write: Unraid often bind-mounts config.yaml as a single file;
+    # os.replace(tmp, path) then fails with EBUSY (Errno 16).
+    write_text(path, text)
 
 
 def _as_list(text: str) -> list:

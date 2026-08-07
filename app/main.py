@@ -17,6 +17,7 @@ from .detectors import Detector
 from .envconfig import apply_env_overrides
 from .feeds import load_all_threat_lists
 from .iputil import load_networks
+from .fileio import write_text
 from .history import DEFAULT_MAX_EVENTS
 from .parser import parse_line
 from .runtime import Runtime
@@ -63,11 +64,7 @@ def load_state(path: str) -> dict:
 
 
 def save_state(path: str, state: dict) -> None:
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(state, fh)
-    os.replace(tmp, path)
+    write_text(path, json.dumps(state))
 
 
 def list_log_files(directory: str, pattern: str) -> List[str]:
