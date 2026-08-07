@@ -1,14 +1,24 @@
 from __future__ import annotations
 
-import json
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import requests
 
 from .detectors import Alert, severity_at_least
 
 log = logging.getLogger("zoraxy-guard.alert")
+
+PUSHOVER_URL = "https://api.pushover.net/1/messages.json"
+
+# Default priority mapping (Pushover: -2 silent … 2 emergency)
+SEVERITY_PRIORITY = {
+    "info": -1,
+    "low": -1,
+    "medium": 0,
+    "high": 1,
+    "critical": 2,
+}
 
 
 class Alerter:
@@ -22,6 +32,27 @@ class Alerter:
         self.generic = (a.get("generic_webhook") or "").strip()
         self.stdout = bool(a.get("stdout", True))
         self.cooldowns = cooldowns
+
+        po = a.get("pushover") or {}
+        if not isinstance(po, dict):
+            po = {}
+        # Flat keys as fallback (handy for Unraid templates)
+        self.po_user = (po.get("user_key") or a.get("pushover_user_key") or "").strip()
+        self.po_token = (po.get("api_token") or a.get("pushover_api_token") or "").strip()
+        self.po_device = (po.get("device") or a.get("pushover_device") or "").strip()
+        self.po_sound = (po.get("sound") or a.get("pushover_sound") or "").strip()
+        self.po_priority_map = dict(SEVERITY_PRIORITY)
+        custom_map = po.get("priority_by_severity") or {}
+        if isinstance(custom_map, dict):
+            for k, v in custom_map.items():
+                try:
+                    self.po_priority_map[str(k).lower()] = int(v)
+                except (TypeError, ValueError):
+                    continue
+        # Emergency priority requires retry/expire (seconds)
+        self.po_retry = int(po.get("retry") or 60)
+        self.po_expire = int(po.get("expire") or 600)
+        self.po_html = bool(po.get("html", False))
 
     def _cooled(self, fingerprint: str, now: float) -> bool:
         last = self.cooldowns.get(fingerprint, 0)
@@ -48,6 +79,8 @@ class Alerter:
             self._discord(title, body, alert.severity)
         if self.tg_token and self.tg_chat:
             self._telegram(title, body)
+        if self.po_user and self.po_token:
+            self._pushover(title, body, alert.severity)
         if self.generic:
             self._generic(title, body, alert)
 
@@ -86,6 +119,38 @@ class Alerter:
             r.raise_for_status()
         except Exception as exc:
             log.error("Telegram send failed: %s", exc)
+
+    def _pushover(self, title: str, body: str, severity: str) -> None:
+        priority = self.po_priority_map.get(severity, 0)
+        # Keep within Pushover limits
+        priority = max(-2, min(2, int(priority)))
+
+        data: Dict[str, Any] = {
+            "token": self.po_token,
+            "user": self.po_user,
+            "title": title[:250],
+            "message": body[:1024],
+            "priority": priority,
+        }
+        if self.po_device:
+            data["device"] = self.po_device
+        if self.po_sound:
+            data["sound"] = self.po_sound
+        if self.po_html:
+            data["html"] = 1
+        if priority == 2:
+            # Emergency: retry at least every 30s, expire max 10800
+            data["retry"] = max(30, self.po_retry)
+            data["expire"] = max(self.po_retry, min(10800, self.po_expire))
+
+        try:
+            r = requests.post(PUSHOVER_URL, data=data, timeout=15)
+            if r.status_code >= 400:
+                log.error("Pushover failed (%s): %s", r.status_code, r.text[:300])
+            else:
+                log.info("Pushover sent (priority=%s)", priority)
+        except Exception as exc:
+            log.error("Pushover send failed: %s", exc)
 
     def _generic(self, title: str, body: str, alert: Alert) -> None:
         payload: Dict[str, Any] = {

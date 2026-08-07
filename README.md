@@ -112,9 +112,24 @@ alerts:
   min_severity: medium
   discord_webhook: "https://discord.com/api/webhooks/..."
   # or env DISCORD_WEBHOOK
+
+  pushover:
+    user_key: "u..."       # or env PUSHOVER_USER_KEY
+    api_token: "a..."      # or env PUSHOVER_API_TOKEN
+    device: ""             # optional
+    sound: "pushover"      # optional
 ```
 
-Telegram: `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`.
+| Channel | Config / Env |
+|---|---|
+| Discord | `discord_webhook` / `DISCORD_WEBHOOK` |
+| Telegram | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` |
+| **Pushover** | `PUSHOVER_USER_KEY` + `PUSHOVER_API_TOKEN` (+ optional `PUSHOVER_DEVICE`, `PUSHOVER_SOUND`) |
+| Generic webhook | `GENERIC_WEBHOOK` |
+
+Pushover priorities (default): `info/low=-1`, `medium=0`, `high=1`, `critical=2` (emergency with retry/expire).
+
+Create an app at [pushover.net/apps/build](https://pushover.net/apps/build), copy **API Token** and your **User Key** from the dashboard.
 
 ## Config tips
 

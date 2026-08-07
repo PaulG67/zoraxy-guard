@@ -18,6 +18,20 @@ def apply_env_overrides(cfg: Dict[str, Any]) -> Dict[str, Any]:
     if os.environ.get("MIN_SEVERITY"):
         alerts["min_severity"] = os.environ["MIN_SEVERITY"].strip()
 
+    # Pushover (https://pushover.net)
+    po = alerts.setdefault("pushover", {})
+    if not isinstance(po, dict):
+        po = {}
+        alerts["pushover"] = po
+    if os.environ.get("PUSHOVER_USER_KEY"):
+        po["user_key"] = os.environ["PUSHOVER_USER_KEY"].strip()
+    if os.environ.get("PUSHOVER_API_TOKEN"):
+        po["api_token"] = os.environ["PUSHOVER_API_TOKEN"].strip()
+    if os.environ.get("PUSHOVER_DEVICE"):
+        po["device"] = os.environ["PUSHOVER_DEVICE"].strip()
+    if os.environ.get("PUSHOVER_SOUND"):
+        po["sound"] = os.environ["PUSHOVER_SOUND"].strip()
+
     if os.environ.get("LOG_DIR"):
         cfg.setdefault("log", {})["directory"] = os.environ["LOG_DIR"]
     if os.environ.get("LOG_PATTERN"):

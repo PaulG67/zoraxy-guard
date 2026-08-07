@@ -11,6 +11,10 @@ services:
       # DISCORD_WEBHOOK: "https://discord.com/api/webhooks/..."
       # TELEGRAM_BOT_TOKEN: ""
       # TELEGRAM_CHAT_ID: ""
+      # PUSHOVER_USER_KEY: ""
+      # PUSHOVER_API_TOKEN: ""
+      # PUSHOVER_DEVICE: ""
+      # PUSHOVER_SOUND: "pushover"
       # KNOWN_LISTS: "ipsum-level5,blocklist-de-apache,feodo-ip"
       # ALLOWLIST_IPS: "192.168.0.0/16,10.0.0.0/8"
     volumes:

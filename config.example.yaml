@@ -90,12 +90,26 @@ exploit_path_ignore: []
 alerts:
   cooldown_seconds: 300
   min_severity: medium
-  # Prefer env vars DISCORD_WEBHOOK / TELEGRAM_* if set (see docker-compose)
+  # Prefer env vars DISCORD_WEBHOOK / TELEGRAM_* / PUSHOVER_* if set
   discord_webhook: ""
   telegram_bot_token: ""
   telegram_chat_id: ""
   generic_webhook: ""
   stdout: true
+
+  # Pushover (https://pushover.net) — App Token + User Key required
+  pushover:
+    user_key: ""          # or env PUSHOVER_USER_KEY
+    api_token: ""         # or env PUSHOVER_API_TOKEN
+    device: ""            # optional: target device name
+    sound: ""             # optional: e.g. siren, pushover, none
+    # Emergency (priority 2) settings for critical alerts
+    retry: 60
+    expire: 600
+    # optional priority overrides: info|low|medium|high|critical → -2..2
+    # priority_by_severity:
+    #   high: 1
+    #   critical: 2
 
 thresholds:
   exploit_hits_for_alert: 3
