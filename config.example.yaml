@@ -1,0 +1,124 @@
+# Zoraxy Guard — copy to /mnt/user/appdata/zoraxy-guard/config.yaml
+
+log:
+  directory: /logs
+  pattern: "zr_*.log"
+  tail_from_end: true
+  poll_interval: 2
+
+allowlist_ips:
+  - 192.168.0.0/16
+  - 10.0.0.0/8
+  - 127.0.0.1
+  - ::1
+
+# Manual IPs/CIDRs
+blocklist_ips: []
+
+# Single extra file (optional)
+blocklist_file: /data/blocklist.txt
+
+# Drop any number of IP / UA / path list files here:
+#   /data/lists/*.txt, *.list, *.netset, *.ipset, *.csv
+# Special filenames:
+#   *useragent* or *_ua.txt  → user-agent fragments
+#   *path* or *exploit*       → exploit path patterns
+lists_dir: /data/lists
+
+# How often to re-download remote lists (hours)
+lists_refresh_hours: 24
+feed_cache_dir: /data/feed-cache
+
+# Built-in known databases (enable by name)
+known_lists:
+  use_cache: true
+  enabled:
+    - ipsum-level5
+    - blocklist-de-apache
+    - blocklist-de-bruteforce
+    - feodo-ip
+    # - spamhaus-drop
+    # - firehol-level1
+    # - greensnow
+    # - tor-exit-nodes   # noisy if family uses Tor
+
+# Any additional remote database (own URL)
+custom_lists:
+  # - name: my-team-blocklist
+  #   url: https://example.com/blocklist.txt
+  #   format: plain_ip   # plain_ip | spamhaus | abusech_csv | csv
+  #   kind: ip           # ip | user_agent | path
+  #   enabled: true
+
+# Legacy free-form URL list (still supported)
+threat_feeds:
+  enabled: false
+  urls: []
+  format: plain_ip
+
+sensitive_hosts:
+  - unr.gehring.li
+  - browser.gehring.li
+  - ha.gehring.li
+  - mediasrv.gehring.li
+  - ps.gehring.li
+  - dl.gehring.li
+  - files.gehring.li
+  - daten.gehring.li
+  - auth.gehring.li
+
+exploit_paths:
+  - ".env"
+  - "/.git"
+  - "wp-admin"
+  - "wp-login"
+  - "xmlrpc.php"
+  - "phpmyadmin"
+  - "/.aws"
+  - "id_rsa"
+  - "passwd"
+  - "../"
+  - "actuator"
+  - "phpunit"
+  - "shell.php"
+  - "eval-stdin"
+  - "cgi-bin"
+  - "vendor/phpunit"
+
+exploit_path_ignore: []
+
+alerts:
+  cooldown_seconds: 300
+  min_severity: medium
+  # Prefer env vars DISCORD_WEBHOOK / TELEGRAM_* if set (see docker-compose)
+  discord_webhook: ""
+  telegram_bot_token: ""
+  telegram_chat_id: ""
+  generic_webhook: ""
+  stdout: true
+
+thresholds:
+  exploit_hits_for_alert: 3
+  exploit_window_seconds: 120
+  block_hits_for_alert: 30
+  block_window_seconds: 300
+  auth_fail_for_alert: 15
+  auth_fail_window_seconds: 300
+
+alert_sensitive_success: false
+
+bad_user_agents:
+  - l9explore
+  - l9tcpid
+  - zgrab
+  - masscan
+  - nuclei
+  - sqlmap
+  - nikto
+  - dirbuster
+  - gobuster
+  - python-requests/
+  - curl/
+  - wget/
+
+state_file: /data/state.json

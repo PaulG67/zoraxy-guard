@@ -1,0 +1,119 @@
+# Zoraxy Guard
+
+Monitors [Zoraxy](https://github.com/tobychui/zoraxy) reverse-proxy logs for:
+
+- exploit / scanner paths (`.env`, `wp-admin`, …)
+- known malicious IPs from **public threat databases** and **your own lists**
+- bad user-agents
+- block storms and brute-force patterns
+- optional successful access to sensitive hosts
+
+Alerts via **Discord**, **Telegram**, generic webhook, and container logs.
+
+Image: `ghcr.io/paulg67/zoraxy-guard:latest`
+
+## Unraid install (Docker Compose Manager)
+
+1. Create folders:
+   ```bash
+   mkdir -p /mnt/user/appdata/zoraxy-guard/data/lists
+   mkdir -p /mnt/user/appdata/zoraxy-guard/data/feed-cache
+   ```
+2. Download default config:
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/PaulG67/zoraxy-guard/main/config.example.yaml \
+     -o /mnt/user/appdata/zoraxy-guard/config.yaml
+   ```
+3. Edit `config.yaml` (domains under `sensitive_hosts`, Discord webhook optional).
+4. Stack / compose:
+   ```yaml
+   services:
+     zoraxy-guard:
+       image: ghcr.io/paulg67/zoraxy-guard:latest
+       container_name: zoraxy-guard
+       restart: unless-stopped
+       environment:
+         TZ: Europe/Zurich
+         DISCORD_WEBHOOK: "https://discord.com/api/webhooks/..."
+         KNOWN_LISTS: "ipsum-level5,blocklist-de-apache,blocklist-de-bruteforce,feodo-ip"
+         ALLOWLIST_IPS: "192.168.0.0/16,10.0.0.0/8"
+       volumes:
+         - /mnt/user/appdata/zoraxy/log:/logs:ro
+         - /mnt/user/appdata/zoraxy-guard/config.yaml:/config/config.yaml:ro
+         - /mnt/user/appdata/zoraxy-guard/data:/data
+   ```
+5. Adjust the **Zoraxy log path** if yours differs.
+6. Start the stack. Check logs: `docker logs -f zoraxy-guard`
+
+### Unraid “Add Container” (XML template)
+
+Import `unraid/zoraxy-guard.xml` from this repo (Docker → Add Container → Template), or paste Repository:
+
+`ghcr.io/paulg67/zoraxy-guard:latest`
+
+Map paths as in the template.
+
+> First image pull may need GHCR public access. If the package is private, make it **public** under GitHub → Packages → Package settings.
+
+## Threat lists / databases
+
+### Built-in catalog (`known_lists`)
+
+Enable by name in `config.yaml` or env `KNOWN_LISTS=a,b,c`:
+
+| Name | Source |
+|---|---|
+| `ipsum-level3` / `level4` / `level5` | [IPsum](https://github.com/stamparm/ipsum) |
+| `spamhaus-drop` / `edrop` / `dropv6` | Spamhaus DROP |
+| `blocklist-de-all` / `ssh` / `apache` / `bruteforce` | blocklist.de |
+| `cinsscore-ci-badguys` | CINS Army |
+| `greensnow` | GreenSnow |
+| `tor-exit-nodes` | Tor exit list (noisy) |
+| `firehol-level1` / `level2` | FireHOL ipsets |
+| `feodo-ip` | abuse.ch Feodo |
+| `sslbl-ip` | abuse.ch SSLBL CSV |
+
+### Local list folder (`lists_dir`)
+
+Drop files into `/data/lists` (on Unraid: `appdata/zoraxy-guard/data/lists/`):
+
+| File name pattern | Meaning |
+|---|---|
+| `*.txt`, `*.list`, `*.netset`, `*.ipset` | IP / CIDR per line |
+| `*.csv` | abuse.ch-style CSV |
+| `*useragent*` / `*_ua.txt` | User-Agent fragments |
+| `*path*` / `*exploit*` | Exploit path patterns |
+
+### Custom remote lists
+
+```yaml
+custom_lists:
+  - name: team-block
+    url: https://example.com/bad-ips.txt
+    format: plain_ip   # plain_ip | spamhaus | abusech_csv
+    kind: ip           # ip | user_agent | path
+    enabled: true
+```
+
+Lists are cached under `/data/feed-cache` and refreshed every `lists_refresh_hours` (default 24).
+
+## Alerting
+
+```yaml
+alerts:
+  min_severity: medium
+  discord_webhook: "https://discord.com/api/webhooks/..."
+  # or env DISCORD_WEBHOOK
+```
+
+Telegram: `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`.
+
+## Config tips
+
+- Always allowlist LAN (`192.168.x.0/16`) so family devices are quiet.
+- Start with `ipsum-level5` + `blocklist-de-apache` (less noise than level3).
+- `alert_sensitive_success: false` avoids alerts when you open Admin apps via mobile data.
+
+## License
+
+MIT

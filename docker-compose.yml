@@ -1,0 +1,18 @@
+services:
+  zoraxy-guard:
+    image: ghcr.io/paulg67/zoraxy-guard:latest
+    # build: .   # uncomment to build locally instead of pulling
+    container_name: zoraxy-guard
+    restart: unless-stopped
+    environment:
+      TZ: Europe/Zurich
+      ZORAXY_GUARD_CONFIG: /config/config.yaml
+      # DISCORD_WEBHOOK: "https://discord.com/api/webhooks/..."
+      # TELEGRAM_BOT_TOKEN: ""
+      # TELEGRAM_CHAT_ID: ""
+      # KNOWN_LISTS: "ipsum-level5,blocklist-de-apache,feodo-ip"
+      # ALLOWLIST_IPS: "192.168.0.0/16,10.0.0.0/8"
+    volumes:
+      - /mnt/user/appdata/zoraxy/log:/logs:ro
+      - /mnt/user/appdata/zoraxy-guard/config.yaml:/config/config.yaml:ro
+      - /mnt/user/appdata/zoraxy-guard/data:/data

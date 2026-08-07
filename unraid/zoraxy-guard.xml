@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>zoraxy-guard</Name>
+  <Repository>ghcr.io/paulg67/zoraxy-guard:latest</Repository>
+  <Registry>https://github.com/PaulG67/zoraxy-guard/pkgs/container/zoraxy-guard</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/PaulG67/zoraxy-guard/issues</Support>
+  <Project>https://github.com/PaulG67/zoraxy-guard</Project>
+  <Overview>
+Zoraxy Guard overwacht Zoraxy-Logs auf Exploit-Scans, bekannte bösartige IPs (öffentliche Threat-Listen + eigene Listen) und Auth-Anomalien. Alarme per Discord, Telegram oder Webhook.
+  </Overview>
+  <Category>Security: Network:Other Tools:</Category>
+  <WebUI/>
+  <TemplateURL>https://raw.githubusercontent.com/PaulG67/zoraxy-guard/main/unraid/zoraxy-guard.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/PaulG67/zoraxy-guard/main/assets/icon.png</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires>Zoraxy log folder mounted read-only</Requires>
+  <Config Name="Zoraxy Logs" Target="/logs" Default="/mnt/user/appdata/zoraxy/log" Mode="ro" Description="Zoraxy log directory (zr_*.log)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/zoraxy/log</Config>
+  <Config Name="Config File" Target="/config/config.yaml" Default="/mnt/user/appdata/zoraxy-guard/config.yaml" Mode="ro" Description="Path to config.yaml" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/zoraxy-guard/config.yaml</Config>
+  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/zoraxy-guard/data" Mode="rw" Description="State, local lists, feed cache" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/zoraxy-guard/data</Config>
+  <Config Name="Timezone" Target="TZ" Default="Europe/Zurich" Mode="rw" Description="Timezone" Type="Variable" Display="always" Required="false" Mask="false">Europe/Zurich</Config>
+  <Config Name="Discord Webhook" Target="DISCORD_WEBHOOK" Default="" Mode="rw" Description="Optional Discord webhook URL" Type="Variable" Display="always" Required="false" Mask="true"/>
+  <Config Name="Telegram Bot Token" Target="TELEGRAM_BOT_TOKEN" Default="" Mode="rw" Description="Optional Telegram bot token" Type="Variable" Display="always" Required="false" Mask="true"/>
+  <Config Name="Telegram Chat ID" Target="TELEGRAM_CHAT_ID" Default="" Mode="rw" Description="Optional Telegram chat id" Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="Known Lists" Target="KNOWN_LISTS" Default="ipsum-level5,blocklist-de-apache,blocklist-de-bruteforce,feodo-ip" Mode="rw" Description="Comma-separated threat list names (see README)" Type="Variable" Display="always" Required="false" Mask="false">ipsum-level5,blocklist-de-apache,blocklist-de-bruteforce,feodo-ip</Config>
+  <Config Name="Allowlist IPs" Target="ALLOWLIST_IPS" Default="192.168.0.0/16,10.0.0.0/8" Mode="rw" Description="Comma-separated trusted CIDRs" Type="Variable" Display="always" Required="false" Mask="false">192.168.0.0/16,10.0.0.0/8</Config>
+  <Config Name="Min Severity" Target="MIN_SEVERITY" Default="medium" Mode="rw" Description="info|low|medium|high|critical" Type="Variable" Display="always" Required="false" Mask="false">medium</Config>
+</Container>

@@ -1,0 +1,9 @@
+data/state.json
+data/state.json.tmp
+data/feed-cache/
+data/blocklist.txt
+__pycache__/
+*.pyc
+.venv/
+config.yaml
+.DS_Store

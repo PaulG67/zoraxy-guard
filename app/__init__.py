@@ -1,0 +1,1 @@
+"""Zoraxy Guard — log monitor for exploit scans and suspicious IPs."""

@@ -1,0 +1,3 @@
+# snippeets for local user-agent block patterns
+# l9explore
+# zgrab
