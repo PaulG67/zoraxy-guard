@@ -1,7 +1,8 @@
 services:
   zoraxy-guard:
+    # Prefer build until GHCR publish is enabled; then switch to image only.
+    build: .
     image: ghcr.io/paulg67/zoraxy-guard:latest
-    # build: .   # uncomment to build locally instead of pulling
     container_name: zoraxy-guard
     restart: unless-stopped
     environment:
