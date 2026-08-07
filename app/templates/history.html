@@ -5,8 +5,10 @@
   <h2 style="margin:0 0 6px;font-size:1.15rem;">Zugriffshistorie</h2>
   <p class="hint" style="margin-top:0;">
     Nur im Arbeitsspeicher (Ring-Buffer, max. {{ data.buffer.max }} Einträge · ~{{ data.buffer.retention_hours }}&nbsp;h).
-    Keine Speicherung auf Disk — nach Neustart leer. Derzeit {{ data.buffer.size }} Einträge im Puffer
-    (gesamt verarbeitet: {{ data.buffer.recorded_total }}).
+    Geo/ASN über Cache + ip-api (öffentliche IPs; LAN markiert privat). Derzeit {{ data.buffer.size }} Einträge im Puffer.
+    {% if data.geo_stats and data.geo_stats.last_error %}
+      <span class="err-text">Geo: {{ data.geo_stats.last_error }}</span>
+    {% endif %}
   </p>
 </section>
 
@@ -29,7 +31,7 @@
     </div>
     <div class="hist-search">
       <label for="q">Filter</label>
-      <input type="text" name="q" id="q" value="{{ data.query }}" placeholder="IP, Host oder Pfad…" autocomplete="off">
+      <input type="text" name="q" id="q" value="{{ data.query }}" placeholder="IP, Host, Pfad, Router…" autocomplete="off">
     </div>
     <div class="hist-go">
       <label>&nbsp;</label>
@@ -44,25 +46,143 @@
     <div class="stat-value">{{ data.total_in_window }}</div>
   </div>
   <div class="card">
-    <div class="stat-label">Apps / Hosts</div>
-    <div class="stat-value">{{ data.unique_apps }}</div>
+    <div class="stat-label">Geblockt</div>
+    <div class="stat-value {% if data.blocked.total %}text-warn{% endif %}">{{ data.blocked.total }}</div>
   </div>
   <div class="card">
-    <div class="stat-label">Client-IPs</div>
-    <div class="stat-value">{{ data.unique_ips }}</div>
+    <div class="stat-label">Block-IPs</div>
+    <div class="stat-value">{{ data.blocked.unique_ips }}</div>
   </div>
   <div class="card">
-    <div class="stat-label">Gruppen</div>
-    <div class="stat-value">{{ data.groups|length }}</div>
+    <div class="stat-label">Apps / Client-IPs</div>
+    <div class="stat-value">{{ data.unique_apps }} / {{ data.unique_ips }}</div>
   </div>
 </div>
+
+{# ---- Blocked statistics ---- #}
+<section class="block">
+  <div class="card blocked-panel">
+    <h3 style="margin:0 0 10px;">Geblockte Zugriffe</h3>
+    {% if data.blocked.total == 0 %}
+      <p class="muted" style="margin:0;">Keine geblockten Requests im gewählten Fenster (403/401/429, Blacklist-Router).</p>
+    {% else %}
+      <div class="blocked-grid">
+        <div>
+          <div class="stat-label">Nach Land</div>
+          <div class="chip-list">
+            {% for c, n in data.blocked.by_country %}
+              <span class="chip">{{ c }} <small>×{{ n }}</small></span>
+            {% else %}
+              <span class="muted">—</span>
+            {% endfor %}
+          </div>
+        </div>
+        <div>
+          <div class="stat-label">Nach Organisation / ISP</div>
+          <div class="chip-list">
+            {% for o, n in data.blocked.by_org %}
+              <span class="chip" title="{{ o }}">{{ o[:36] }}{% if o|length > 36 %}…{% endif %} <small>×{{ n }}</small></span>
+            {% else %}
+              <span class="muted">—</span>
+            {% endfor %}
+          </div>
+        </div>
+        <div>
+          <div class="stat-label">Top IPs</div>
+          <div class="chip-list">
+            {% for ip, n in data.blocked.by_ip %}
+              <a class="chip linkish" href="{{ url_for('history_page', w=data.window, view='ip', q=ip) }}">{{ ip }} <small>×{{ n }}</small></a>
+            {% endfor %}
+          </div>
+        </div>
+        <div>
+          <div class="stat-label">Top Hosts · Router · Status</div>
+          <div class="chip-list">
+            {% for h, n in data.blocked.by_host[:6] %}
+              <a class="chip linkish" href="{{ url_for('history_page', w=data.window, view='app', q=h) }}">{{ h }} <small>×{{ n }}</small></a>
+            {% endfor %}
+            {% for r, n in data.blocked.by_router %}
+              <span class="chip st-4">{{ r }} ×{{ n }}</span>
+            {% endfor %}
+            {% for s, n in data.blocked.by_status %}
+              <span class="chip st-4">HTTP {{ s }} ×{{ n }}</span>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+
+      <div class="hist-table-wrap" style="margin-top:14px;">
+        <table class="hist-table">
+          <thead>
+            <tr>
+              <th>Zeit</th>
+              <th>Client</th>
+              <th>Land</th>
+              <th>Organisation</th>
+              <th>App / Host</th>
+              <th>Request</th>
+              <th>Status</th>
+              <th>Grund</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for s in data.blocked.samples %}
+              <tr class="row-blocked">
+                <td class="mono nowrap">{{ time.strftime('%H:%M:%S', time.localtime(s.ts)) }}</td>
+                <td class="mono">
+                  <a href="{{ url_for('history_page', w=data.window, view='ip', q=s.client) }}">{{ s.client }}</a>
+                </td>
+                <td>
+                  {% if s.geo.country_code %}
+                    <span class="cc">{{ s.geo.country_code }}</span>
+                  {% endif %}
+                  <span class="muted">{{ s.geo.country }}</span>
+                </td>
+                <td class="org-cell" title="{{ s.geo.as_full or s.geo.org }}">
+                  {% if s.geo.asn %}<span class="mono muted">{{ s.geo.asn }}</span> {% endif %}
+                  {{ s.geo.org }}
+                </td>
+                <td class="mono">
+                  <a href="{{ url_for('history_page', w=data.window, view='app', q=s.origin) }}">{{ s.origin }}</a>
+                </td>
+                <td class="mono">
+                  <span>{{ s.method }}</span>
+                  <span class="path-cell" title="{{ s.path }}">{{ s.path }}</span>
+                  <div class="muted ua-cell" title="{{ s.ua }}">{{ s.ua or '—' }}</div>
+                </td>
+                <td>
+                  <span class="st-badge st-{{ (s.status // 100) if s.status else 0 }}">{{ s.status or '—' }}</span>
+                  <div class="muted mono" style="font-size:0.75rem;">{{ s.router or '—' }}</div>
+                </td>
+                <td>
+                  {% for r in s.reasons %}
+                    <span class="chip st-4">{{ r }}</span>
+                  {% endfor %}
+                  {% if s.threat_list %}
+                    <span class="chip st-5">Liste: {{ s.threat_list }}</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% if data.blocked.total > data.blocked.samples|length %}
+        <p class="hint">Zeigt die neuesten {{ data.blocked.samples|length }} von {{ data.blocked.total }} Block-Events.</p>
+      {% endif %}
+    {% endif %}
+  </div>
+</section>
+
+{# ---- Access groups ---- #}
+<section class="block">
+  <h3 style="margin:0 0 10px;font-size:1rem;">Zugriffe {% if data.view == 'app' %}nach App{% else %}nach IP{% endif %}</h3>
 
 {% if not data.groups %}
   <div class="card">
     <p class="muted" style="margin:0;">
       Keine Zugriffe im gewählten Fenster
       {% if data.query %}(Filter «{{ data.query }}»){% endif %}.
-      History füllt sich, sobald Zoraxy Log-Zeilen eintreffen.
     </p>
   </div>
 {% else %}
@@ -73,7 +193,14 @@
           <div class="hist-group-main">
             <span class="hist-key mono">{{ g.key }}</span>
             <span class="hist-meta">
+              {% if data.view == 'ip' and g.geo %}
+                <span class="cc">{{ g.geo.country_code or '—' }}</span>
+                <span class="muted" title="{{ g.geo.as_full or g.geo.org }}">{{ g.geo.org }}</span>
+              {% endif %}
               <span class="badge">{{ g.count }} Req</span>
+              {% if g.blocked_count %}
+                <span class="badge badge-warn">{{ g.blocked_count }} block</span>
+              {% endif %}
               <span class="muted">
                 {% if data.view == 'app' %}{{ g.unique_partners }} IPs{% else %}{{ g.unique_partners }} Hosts{% endif %}
               </span>
@@ -81,6 +208,9 @@
             </span>
           </div>
           <div class="hist-chips">
+            {% for c, n in g.countries_top %}
+              <span class="chip">{{ c }} ×{{ n }}</span>
+            {% endfor %}
             {% for m, c in g.method_top %}
               <span class="chip">{{ m }} ×{{ c }}</span>
             {% endfor %}
@@ -108,6 +238,8 @@
                 <tr>
                   <th>Zeit</th>
                   {% if data.view == 'app' %}<th>Client</th>{% else %}<th>App / Host</th>{% endif %}
+                  <th>Land</th>
+                  <th>Organisation</th>
                   <th>Methode</th>
                   <th>Pfad</th>
                   <th>Status</th>
@@ -117,7 +249,7 @@
               </thead>
               <tbody>
                 {% for s in g.samples %}
-                  <tr>
+                  <tr class="{% if s.blocked %}row-blocked{% endif %}">
                     <td class="mono nowrap">{{ time.strftime('%H:%M:%S', time.localtime(s.ts)) }}</td>
                     <td class="mono">
                       {% if data.view == 'app' %}
@@ -125,6 +257,16 @@
                       {% else %}
                         <a href="{{ url_for('history_page', w=data.window, view='app', q=s.origin) }}">{{ s.origin }}</a>
                       {% endif %}
+                    </td>
+                    <td>
+                      {% if s.geo.country_code %}
+                        <span class="cc">{{ s.geo.country_code }}</span>
+                      {% endif %}
+                      <span class="muted small-country">{{ s.geo.country }}</span>
+                    </td>
+                    <td class="org-cell" title="{{ s.geo.as_full or s.geo.org }}">
+                      {% if s.geo.asn %}<span class="mono muted">{{ s.geo.asn }}</span> {% endif %}
+                      {{ s.geo.org }}
                     </td>
                     <td class="mono">{{ s.method }}</td>
                     <td class="mono path-cell" title="{{ s.path }}">{{ s.path }}</td>
@@ -144,4 +286,5 @@
     {% endfor %}
   </div>
 {% endif %}
+</section>
 {% endblock %}

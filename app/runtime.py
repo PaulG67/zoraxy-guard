@@ -10,6 +10,7 @@ from .alerter import Alerter
 from .detectors import Alert, Detector
 from .feeds import ThreatLists, find_list_match
 from .history import AccessHistory, DEFAULT_MAX_EVENTS
+from .geoip import GeoCache
 from .iputil import parse_ip
 from .parser import LogEvent
 
@@ -138,6 +139,7 @@ class Runtime:
     history: AccessHistory = field(
         default_factory=lambda: AccessHistory(max_events=DEFAULT_MAX_EVENTS)
     )
+    geo: GeoCache = field(default_factory=GeoCache)
     reload_requested: bool = False
     lists_reload_requested: bool = False
 

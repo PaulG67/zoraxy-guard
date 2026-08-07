@@ -129,7 +129,13 @@ def create_app(config_path: str) -> Flask:
         if view not in ("app", "ip"):
             view = "app"
         q = (request.args.get("q") or "").strip()
-        data = rt.RUNTIME.history.snapshot(window=window, view=view, q=q)
+        data = rt.RUNTIME.history.snapshot(
+            window=window,
+            view=view,
+            q=q,
+            geo=rt.RUNTIME.geo,
+            threats=rt.RUNTIME.threats,
+        )
         return render_template("history.html", data=data, time=time)
 
     @app.route("/config", methods=["GET", "POST"])

@@ -322,3 +322,51 @@ section.block { margin-bottom: 18px; }
 @media (max-width: 720px) {
   .path-cell, .ua-cell { max-width: 140px; }
 }
+
+.cc {
+  display: inline-block;
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  min-width: 2rem;
+  text-align: center;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #1a2433;
+  border: 1px solid var(--border);
+  color: var(--text);
+  margin-right: 4px;
+}
+.org-cell {
+  max-width: 180px;
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.small-country { font-size: 0.78rem; }
+.row-blocked { background: rgba(240, 113, 120, 0.06); }
+.badge-warn {
+  background: rgba(230, 184, 77, 0.15);
+  border-color: rgba(230, 184, 77, 0.4);
+  color: var(--warn);
+}
+.text-warn { color: var(--warn); }
+.err-text { color: var(--err); }
+.blocked-panel h3 { font-size: 1rem; }
+.blocked-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px 18px;
+}
+@media (max-width: 800px) {
+  .blocked-grid { grid-template-columns: 1fr; }
+}
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.chip.st-5 { color: var(--crit); border-color: rgba(255,107,107,0.35); }

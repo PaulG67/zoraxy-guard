@@ -6,9 +6,14 @@ import time
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from threading import Lock
-from typing import Any, Deque, DefaultDict, TYPE_CHECKING
+from typing import Any, Deque, DefaultDict, Optional, TYPE_CHECKING
+
+from .feeds import find_list_match
+from .iputil import parse_ip
 
 if TYPE_CHECKING:
+    from .feeds import ThreatLists
+    from .geoip import GeoCache
     from .parser import LogEvent
 
 MAX_WINDOW_SEC = 24 * 3600
@@ -23,6 +28,17 @@ WINDOWS = {
     "24h": MAX_WINDOW_SEC,
 }
 
+BLOCKED_ROUTERS = frozenset(
+    {
+        "blacklist",
+        "ipblacklist",
+        "geoip",
+        "geoblacklist",
+        "access",
+        "block",
+    }
+)
+
 
 @dataclass(slots=True, frozen=True)
 class AccessEvent:
@@ -34,6 +50,37 @@ class AccessEvent:
     status: int
     router: str
     ua: str
+
+
+def is_blocked(event: AccessEvent) -> bool:
+    router = (event.router or "").lower().replace(" ", "")
+    if event.status in (401, 403, 429, 451):
+        return True
+    if router in BLOCKED_ROUTERS:
+        return True
+    if "blacklist" in router or "block" in router:
+        return True
+    return False
+
+
+def block_reasons(event: AccessEvent, threat_list: Optional[str] = None) -> list[str]:
+    reasons: list[str] = []
+    router = (event.router or "").lower()
+    if "blacklist" in router or router in ("ipblacklist", "geoip", "geoblacklist"):
+        reasons.append(f"Router: {event.router or router}")
+    if event.status == 403:
+        reasons.append("HTTP 403")
+    elif event.status == 401:
+        reasons.append("HTTP 401 (Auth)")
+    elif event.status == 429:
+        reasons.append("HTTP 429 (Rate-Limit)")
+    elif event.status == 451:
+        reasons.append("HTTP 451")
+    elif event.status >= 400 and not reasons:
+        reasons.append(f"HTTP {event.status}")
+    if threat_list:
+        reasons.append(f"Threat-Liste: {threat_list}")
+    return reasons or ["geblockt"]
 
 
 class AccessHistory:
@@ -97,6 +144,14 @@ class AccessHistory:
             self._events.popleft()
             self.dropped_old += 1
 
+    def _threat_for(self, ip_str: str, threats: Optional["ThreatLists"]) -> Optional[str]:
+        if not threats:
+            return None
+        ip = parse_ip(ip_str)
+        if not ip:
+            return None
+        return find_list_match(str(ip), threats)
+
     def snapshot(
         self,
         window: str = "1h",
@@ -104,6 +159,9 @@ class AccessHistory:
         limit_groups: int = 80,
         samples_per_group: int = 25,
         q: str = "",
+        geo: Optional["GeoCache"] = None,
+        threats: Optional["ThreatLists"] = None,
+        blocked_sample_limit: int = 40,
     ) -> dict[str, Any]:
         sec = WINDOWS.get(window, 3600)
         now = time.time()
@@ -112,7 +170,6 @@ class AccessHistory:
 
         with self._lock:
             self._prune_locked(now - MAX_WINDOW_SEC)
-            # Copy only in-window events (slice from right is approx OK; scan is fine for 15k)
             events = [e for e in self._events if e.ts >= cutoff]
             buf_len = len(self._events)
             rec = self.recorded
@@ -126,14 +183,31 @@ class AccessHistory:
                 if qn in e.client.lower()
                 or qn in e.origin.lower()
                 or qn in e.path.lower()
+                or qn in (e.router or "").lower()
             ]
+
+        # Geo for all client IPs in window (cached; few API misses)
+        clients = {e.client for e in events}
+        geo_map: dict[str, dict] = {}
+        if geo and clients:
+            geo_map = geo.resolve(clients)
+
+        def ginfo(ip: str) -> dict:
+            base = geo_map.get(ip) or {
+                "country": "—",
+                "country_code": "",
+                "org": "—",
+                "asn": "",
+                "as_full": "",
+                "label": "—",
+            }
+            return base
 
         groups: DefaultDict[str, list[AccessEvent]] = defaultdict(list)
         for e in events:
             key = e.origin if view == "app" else e.client
             groups[key].append(e)
 
-        # Sort groups by latest activity then by count
         ranked = sorted(
             groups.items(),
             key=lambda kv: (kv[1][-1].ts if kv[1] else 0, len(kv[1])),
@@ -142,28 +216,45 @@ class AccessHistory:
 
         out_groups = []
         for key, items in ranked:
-            items_sorted = items[-samples_per_group:]  # most recent N in group (append order)
-            items_sorted = list(reversed(items_sorted))  # newest first for UI
+            items_sorted = list(reversed(items[-samples_per_group:]))
             statuses: DefaultDict[str, int] = defaultdict(int)
             methods: DefaultDict[str, int] = defaultdict(int)
             partners: DefaultDict[str, int] = defaultdict(int)
+            countries: DefaultDict[str, int] = defaultdict(int)
+            blocked_n = 0
             for e in items:
                 statuses[str(e.status)] += 1
                 methods[e.method] += 1
                 partner = e.client if view == "app" else e.origin
                 partners[partner] += 1
+                if is_blocked(e):
+                    blocked_n += 1
+                if view == "app":
+                    gi = ginfo(e.client)
+                    cc = gi.get("country_code") or gi.get("country") or "?"
+                    countries[str(cc)] += 1
+                else:
+                    gi = ginfo(key)
+                    cc = gi.get("country_code") or gi.get("country") or "?"
+                    countries[str(cc)] += 1
 
             top_partners = sorted(partners.items(), key=lambda x: -x[1])[:8]
+            top_countries = sorted(countries.items(), key=lambda x: -x[1])[:6]
+            key_geo = ginfo(key) if view == "ip" else None
+
             out_groups.append(
                 {
                     "key": key,
                     "count": len(items),
+                    "blocked_count": blocked_n,
                     "first_ts": items[0].ts,
                     "last_ts": items[-1].ts,
                     "unique_partners": len(partners),
                     "status_top": sorted(statuses.items(), key=lambda x: -x[1])[:5],
                     "method_top": sorted(methods.items(), key=lambda x: -x[1])[:4],
                     "partners_top": top_partners,
+                    "countries_top": top_countries,
+                    "geo": key_geo,
                     "samples": [
                         {
                             "ts": e.ts,
@@ -174,9 +265,51 @@ class AccessHistory:
                             "status": e.status,
                             "router": e.router,
                             "ua": e.ua,
+                            "blocked": is_blocked(e),
+                            "geo": ginfo(e.client),
+                            "threat_list": self._threat_for(e.client, threats),
                         }
                         for e in items_sorted
                     ],
+                }
+            )
+
+        # --- Blocked statistics ---
+        blocked_events = [e for e in events if is_blocked(e)]
+        block_by_country: DefaultDict[str, int] = defaultdict(int)
+        block_by_org: DefaultDict[str, int] = defaultdict(int)
+        block_by_ip: DefaultDict[str, int] = defaultdict(int)
+        block_by_host: DefaultDict[str, int] = defaultdict(int)
+        block_by_router: DefaultDict[str, int] = defaultdict(int)
+        block_by_status: DefaultDict[str, int] = defaultdict(int)
+
+        for e in blocked_events:
+            gi = ginfo(e.client)
+            cc = gi.get("country_code") or gi.get("country") or "?"
+            org = gi.get("org") or "—"
+            block_by_country[str(cc)] += 1
+            block_by_org[str(org)[:60]] += 1
+            block_by_ip[e.client] += 1
+            block_by_host[e.origin] += 1
+            block_by_router[e.router or "—"] += 1
+            block_by_status[str(e.status or "—")] += 1
+
+        blocked_samples = []
+        for e in reversed(blocked_events[-blocked_sample_limit:]):
+            tl = self._threat_for(e.client, threats)
+            blocked_samples.append(
+                {
+                    "ts": e.ts,
+                    "client": e.client,
+                    "origin": e.origin,
+                    "method": e.method,
+                    "path": e.path,
+                    "status": e.status,
+                    "router": e.router,
+                    "ua": e.ua,
+                    "geo": ginfo(e.client),
+                    "threat_list": tl,
+                    "reasons": block_reasons(e, tl),
                 }
             )
 
@@ -192,6 +325,19 @@ class AccessHistory:
             "unique_ips": len(unique_ips),
             "unique_apps": len(unique_apps),
             "groups": out_groups,
+            "blocked": {
+                "total": len(blocked_events),
+                "unique_ips": len(block_by_ip),
+                "unique_apps": len(block_by_host),
+                "by_country": sorted(block_by_country.items(), key=lambda x: -x[1])[:12],
+                "by_org": sorted(block_by_org.items(), key=lambda x: -x[1])[:12],
+                "by_ip": sorted(block_by_ip.items(), key=lambda x: -x[1])[:15],
+                "by_host": sorted(block_by_host.items(), key=lambda x: -x[1])[:12],
+                "by_router": sorted(block_by_router.items(), key=lambda x: -x[1])[:8],
+                "by_status": sorted(block_by_status.items(), key=lambda x: -x[1])[:8],
+                "samples": blocked_samples,
+            },
+            "geo_stats": geo.stats() if geo else {},
             "buffer": {
                 "size": buf_len,
                 "max": max_ev,
