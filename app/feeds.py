@@ -14,115 +14,9 @@ from typing import Dict, Iterable, List, Optional, Set, Tuple
 import requests
 
 from .iputil import IpNetwork, load_networks_file, parse_network
+from .catalog import get_enabled_downloadable
 
 log = logging.getLogger("zoraxy-guard.feeds")
-
-# Built-in catalog of known public IP / indicator lists.
-# Users enable entries by name in config under known_lists.
-KNOWN_LIST_CATALOG: Dict[str, dict] = {
-    "ipsum-level3": {
-        "description": "IPsum level 3 — IPs reported 3+ times recently",
-        "url": "https://raw.githubusercontent.com/stamparm/ipsum/master/levels/3.txt",
-        "format": "plain_ip",
-        "kind": "ip",
-    },
-    "ipsum-level4": {
-        "description": "IPsum level 4 — noisier / broader",
-        "url": "https://raw.githubusercontent.com/stamparm/ipsum/master/levels/4.txt",
-        "format": "plain_ip",
-        "kind": "ip",
-    },
-    "ipsum-level5": {
-        "description": "IPsum level 5 — high confidence (stricter)",
-        "url": "https://raw.githubusercontent.com/stamparm/ipsum/master/levels/5.txt",
-        "format": "plain_ip",
-        "kind": "ip",
-    },
-    "spamhaus-drop": {
-        "description": "Spamhaus DROP (IPv4 hijacked/hijacking-netblocks)",
-        "url": "https://www.spamhaus.org/drop/drop.txt",
-        "format": "spamhaus",
-        "kind": "ip",
-    },
-    "spamhaus-edrop": {
-        "description": "Spamhaus EDROP",
-        "url": "https://www.spamhaus.org/drop/edrop.txt",
-        "format": "spamhaus",
-        "kind": "ip",
-    },
-    "spamhaus-dropv6": {
-        "description": "Spamhaus DROPv6",
-        "url": "https://www.spamhaus.org/drop/dropv6.txt",
-        "format": "spamhaus",
-        "kind": "ip",
-    },
-    "blocklist-de-all": {
-        "description": "blocklist.de — all attack IPs (24h)",
-        "url": "https://lists.blocklist.de/lists/all.txt",
-        "format": "plain_ip",
-        "kind": "ip",
-    },
-    "blocklist-de-ssh": {
-        "description": "blocklist.de — SSH attacks",
-        "url": "https://lists.blocklist.de/lists/ssh.txt",
-        "format": "plain_ip",
-        "kind": "ip",
-    },
-    "blocklist-de-apache": {
-        "description": "blocklist.de — Apache/web attacks",
-        "url": "https://lists.blocklist.de/lists/apache.txt",
-        "format": "plain_ip",
-        "kind": "ip",
-    },
-    "blocklist-de-bruteforce": {
-        "description": "blocklist.de — brute force",
-        "url": "https://lists.blocklist.de/lists/bruteforcelogin.txt",
-        "format": "plain_ip",
-        "kind": "ip",
-    },
-    "cinsscore-ci-badguys": {
-        "description": "CINS Army bad guys (CI Army list)",
-        "url": "https://cinsscore.com/list/ci-badguys.txt",
-        "format": "plain_ip",
-        "kind": "ip",
-    },
-    "greensnow": {
-        "description": "GreenSnow blocklist",
-        "url": "https://blocklist.greensnow.co/greensnow.txt",
-        "format": "plain_ip",
-        "kind": "ip",
-    },
-    "tor-exit-nodes": {
-        "description": "Tor Project bulk exit list (may cause false positives)",
-        "url": "https://check.torproject.org/torbulkexitlist",
-        "format": "plain_ip",
-        "kind": "ip",
-    },
-    "firehol-level1": {
-        "description": "FireHOL level1 (requires raw.githubusercontent mirror)",
-        "url": "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/firehol_level1.netset",
-        "format": "plain_ip",
-        "kind": "ip",
-    },
-    "firehol-level2": {
-        "description": "FireHOL level2",
-        "url": "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/firehol_level2.netset",
-        "format": "plain_ip",
-        "kind": "ip",
-    },
-    "feodo-ip": {
-        "description": "Feodo Tracker botnet C2 IPv4 (abuse.ch)",
-        "url": "https://feodotracker.abuse.ch/downloads/ipblocklist.txt",
-        "format": "plain_ip",
-        "kind": "ip",
-    },
-    "sslbl-ip": {
-        "description": "abuse.ch SSLBL botnet C2 IPs (CSV)",
-        "url": "https://sslbl.abuse.ch/blacklist/sslipblacklist.csv",
-        "format": "abusech_csv",
-        "kind": "ip",
-    },
-}
 
 
 _IP_RE = re.compile(
@@ -317,11 +211,7 @@ def load_all_threat_lists(cfg: dict, cache_dir: str = "/data/feed-cache") -> Thr
         enabled_names = known
         known = {"enabled": enabled_names}
 
-    for name in enabled_names:
-        entry = KNOWN_LIST_CATALOG.get(str(name))
-        if not entry:
-            log.warning("Unknown known_lists entry: %s (ignored)", name)
-            continue
+    for name, entry in get_enabled_downloadable(list(enabled_names)):
         remote_jobs.append(
             {
                 "name": f"known:{name}",
@@ -435,7 +325,11 @@ def find_list_match(ip_str: str, threat: ThreatLists) -> Optional[str]:
 
 
 def catalog_as_markdown() -> str:
-    lines = ["| Name | Description |", "|---|---|"]
-    for name, meta in sorted(KNOWN_LIST_CATALOG.items()):
-        lines.append(f"| `{name}` | {meta['description']} |")
+    from .catalog import catalog_as_feed_map
+
+    lines = ["| Name | Reliability | Status | Description |", "|---|---|---|---|"]
+    for name, meta in sorted(catalog_as_feed_map().items()):
+        lines.append(
+            f"| `{name}` | {meta.get('reliability', '')} | {meta.get('status', '')} | {meta['description']} |"
+        )
     return "\n".join(lines)

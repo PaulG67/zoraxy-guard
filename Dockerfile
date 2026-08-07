@@ -14,9 +14,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
+COPY catalog ./catalog
 COPY config.example.yaml /config.example.yaml
 
-RUN mkdir -p /data/lists /data/feed-cache /config /logs
+RUN mkdir -p /data/lists /data/feed-cache /data/catalog /config /logs
 
 VOLUME ["/config", "/data", "/logs"]
 

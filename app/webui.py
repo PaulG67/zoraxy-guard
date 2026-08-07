@@ -24,7 +24,14 @@ from werkzeug.serving import make_server
 from . import runtime as rt
 from .detectors import Alert
 from .envconfig import apply_env_overrides
-from .feeds import KNOWN_LIST_CATALOG
+from .catalog import (
+    catalog_as_feed_map,
+    get_active_catalog,
+    load_meta,
+    prune_config_enabled,
+    update_catalog_from_remote,
+)
+from . import catalog as catalog_mod
 
 log = logging.getLogger("zoraxy-guard.web")
 
@@ -217,7 +224,7 @@ def create_app(config_path: str) -> Flask:
             cfg=disk,
             runtime_cfg=runtime_cfg,
             yaml_text=yaml_text,
-            catalog=KNOWN_LIST_CATALOG,
+            catalog=catalog_as_feed_map(),
             enabled=set(enabled),
             as_text=_as_text,
         )
@@ -227,8 +234,59 @@ def create_app(config_path: str) -> Flask:
     def action_reload_lists():
         if rt.RUNTIME:
             rt.RUNTIME.request_lists_reload()
-            flash("Threat-Listen werden neu geladen…", "ok")
+            flash("Threat-Listen-Inhalte werden neu geladen…", "ok")
         return redirect(url_for("dashboard"))
+
+    @app.route("/actions/update-catalog", methods=["POST"])
+    @login_required
+    def action_update_catalog():
+        """Refresh which lists exist (new/deprecated), not IP content."""
+        probe = request.form.get("probe") == "on"
+        try:
+            meta = update_catalog_from_remote(probe=probe)
+            # Prune deprecated from config if user asked
+            if request.form.get("prune_config") == "on" and rt.RUNTIME:
+                path = rt.RUNTIME.config_path
+                disk = _load_yaml_file(path)
+                kl = disk.get("known_lists") or {}
+                if isinstance(kl, list):
+                    enabled = kl
+                    kept, dropped = prune_config_enabled(enabled)
+                    disk["known_lists"] = kept
+                else:
+                    enabled = list((kl or {}).get("enabled") or [])
+                    kept, dropped = prune_config_enabled(enabled)
+                    disk["known_lists"] = {"use_cache": True, "enabled": kept}
+                if dropped:
+                    _save_yaml_file(path, disk)
+                    rt.RUNTIME.request_reload()
+                    flash(
+                        f"Katalog aktualisiert (v{meta.get('version')}). "
+                        f"Neu: {len(meta.get('added') or [])}, entfernt: {len(meta.get('removed') or [])}. "
+                        f"Aus Config entfernt (deprecated): {', '.join(dropped)}",
+                        "ok",
+                    )
+                else:
+                    flash(
+                        f"Katalog aktualisiert (v{meta.get('version')}). "
+                        f"+{len(meta.get('added') or [])} / -{len(meta.get('removed') or [])} Listen. "
+                        f"Deprecated im Katalog: {len(meta.get('deprecated') or [])}.",
+                        "ok",
+                    )
+            else:
+                flash(
+                    f"Katalog aktualisiert (v{meta.get('version')}). "
+                    f"Neu: {meta.get('added') or '–'} · Entfernt: {meta.get('removed') or '–'} · "
+                    f"Deprecated: {meta.get('deprecated') or '–'}",
+                    "ok",
+                )
+            # Always refresh list contents on catalog change so new names can load later
+            if rt.RUNTIME:
+                rt.RUNTIME.request_lists_reload()
+        except Exception as exc:
+            log.exception("Catalog update failed")
+            flash(f"Katalog-Update fehlgeschlagen: {exc}", "error")
+        return redirect(url_for("lists_page"))
 
     @app.route("/actions/reload-config", methods=["POST"])
     @login_required
@@ -274,12 +332,18 @@ def create_app(config_path: str) -> Flask:
                         files.append({"name": f.name, "size": f.stat().st_size})
         except OSError:
             pass
+        cat = get_active_catalog()
+        meta = load_meta()
         return render_template(
             "lists.html",
             snap=snap,
             files=files,
             lists_dir=lists_dir,
-            catalog=KNOWN_LIST_CATALOG,
+            catalog=catalog_as_feed_map(cat),
+            catalog_doc=cat,
+            catalog_meta=meta,
+            catalog_url=catalog_mod.DEFAULT_REMOTE,
+            time=time,
         )
 
     return app

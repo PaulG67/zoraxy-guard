@@ -43,13 +43,22 @@
 
   <section class="block">
     <h2>Bekannte Threat-Datenbanken</h2>
+    <p class="hint">Katalog aktualisieren (neue/obsolette Quellen) unter <a href="{{ url_for('lists_page') }}">Listen</a>. Reliability: high / medium / low / avoid.</p>
     <div class="checks">
       {% for name, meta in catalog.items()|sort %}
-      <label class="check">
-        <input type="checkbox" name="known_lists" value="{{ name }}" {% if name in enabled %}checked{% endif %}>
+      {% set st = (meta.status or 'active')|lower %}
+      {% set rel = (meta.reliability or 'medium')|lower %}
+      <label class="check {% if st == 'deprecated' or rel == 'avoid' %}muted{% endif %}">
+        <input type="checkbox" name="known_lists" value="{{ name }}"
+          {% if name in enabled and st != 'deprecated' and rel != 'avoid' %}checked{% endif %}
+          {% if st == 'deprecated' or rel == 'avoid' %}disabled{% endif %}>
         <span>
           <code>{{ name }}</code>
-          <small>{{ meta.description }}</small>
+          <small>
+            <strong class="sev {{ 'high' if rel == 'high' else ('low' if rel in ['low','avoid'] else 'medium') }}">{{ rel }}</strong>
+            · {{ st }}
+            · {{ meta.description }}
+          </small>
         </span>
       </label>
       {% endfor %}

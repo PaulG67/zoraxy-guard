@@ -3,8 +3,112 @@
 {% block content %}
 
 <div class="card">
+  <h2>Katalog aktualisieren</h2>
+  <p class="muted">
+    Das aktualisiert die <strong>Liste der verfügbaren Threat-Datenbanken</strong>
+    (neu hinzugefügt, obsolet/deprecated entfernt) — nicht den IP-Inhalt der Listen.
+    Quelle: <code>{{ catalog_url }}</code>
+  </p>
+  {% if catalog_meta and catalog_meta.last_update_at %}
+  <p class="muted">
+    Letztes Katalog-Update:
+    {{ time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(catalog_meta.last_update_at)) if time is defined else catalog_meta.last_update_at }}
+    · v{{ catalog_meta.version or '?' }}
+  </p>
+  {% else %}
+  <p class="muted">Noch kein Remote-Update — es gilt der mitgelieferte Katalog (v{{ catalog_doc.version if catalog_doc else '?' }}).</p>
+  {% endif %}
+
+  {% if catalog_doc and catalog_doc.notes %}
+  <ul class="muted">
+    {% for n in catalog_doc.notes %}
+    <li>{{ n }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('action_update_catalog') }}" class="actions">
+    <label style="margin:0; display:flex; gap:8px; align-items:center;">
+      <input type="checkbox" name="probe" checked> URLs der Listen prüfen (HEAD/GET)
+    </label>
+    <label style="margin:0; display:flex; gap:8px; align-items:center;">
+      <input type="checkbox" name="prune_config" checked> Deprecated Listen aus meiner Config entfernen
+    </label>
+    <button class="primary" type="submit">Katalog jetzt aktualisieren</button>
+  </form>
+  <form method="post" action="{{ url_for('action_reload_lists') }}" class="actions">
+    <button type="submit">Nur Listen-<em>Inhalte</em> neu laden</button>
+  </form>
+</div>
+
+{% if catalog_doc and catalog_doc.sources and catalog_doc.sources.meta %}
+<div class="card" style="margin-top:14px">
+  <h2>Meta-Quellen im Internet</h2>
+  <p class="muted">Es gibt keine einzelne «Liste aller Listen» mit ISO-Rating. Diese Projekte pflegen Vergleiche:</p>
+  <table>
+    <thead><tr><th>Quelle</th><th>Beschreibung</th></tr></thead>
+    <tbody>
+      {% for s in catalog_doc.sources.meta %}
+      <tr>
+        <td><a href="{{ s.url }}" target="_blank" rel="noopener">{{ s.name }}</a></td>
+        <td class="muted">{{ s.description }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<div class="card" style="margin-top:14px">
+  <h2>Bekannte Datenbanken (Katalog)</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Reliability</th>
+        <th>Status</th>
+        <th>FP-Risiko</th>
+        <th>Beschreibung / Hinweise</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for name, meta in catalog.items()|sort %}
+      <tr>
+        <td><code>{{ name }}</code></td>
+        <td class="sev {{ 'high' if meta.reliability == 'high' else ('low' if meta.reliability in ['low','avoid'] else 'medium') }}">{{ meta.reliability }}</td>
+        <td>{{ meta.status }}</td>
+        <td class="muted">{{ meta.false_positive_risk }}</td>
+        <td>
+          {{ meta.description }}
+          {% if meta.notes %}<div class="muted" style="margin-top:4px">{{ meta.notes }}</div>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if catalog_meta and catalog_meta.probe %}
+<div class="card" style="margin-top:14px">
+  <h2>Letzter URL-Probe</h2>
+  <table>
+    <thead><tr><th>Liste</th><th>OK</th><th>Detail</th></tr></thead>
+    <tbody>
+      {% for name, p in catalog_meta.probe.items()|sort %}
+      <tr>
+        <td><code>{{ name }}</code></td>
+        <td>{% if p.ok %}✓{% else %}<span class="sev high">✗</span>{% endif %}</td>
+        <td class="muted">{{ p.message }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
+<div class="card" style="margin-top:14px">
   <h2>Lokale Listen</h2>
-  <p class="muted">Ordner: <code>{{ lists_dir }}</code> — auf Unraid typisch <code>appdata/zoraxy-guard/data/lists/</code></p>
+  <p class="muted">Ordner: <code>{{ lists_dir }}</code></p>
   {% if files %}
   <table>
     <thead><tr><th>Datei</th><th>Größe</th></tr></thead>
@@ -15,25 +119,12 @@
     </tbody>
   </table>
   {% else %}
-  <p class="muted">Keine Dateien. Lege z. B. <code>my-block.txt</code> (IPs) oder <code>useragents.txt</code> ab.</p>
+  <p class="muted">Keine lokalen Dateien.</p>
   {% endif %}
 </div>
 
 <div class="card" style="margin-top:14px">
-  <h2>Katalog (öffentlich)</h2>
-  <p class="muted">Aktivieren unter <a href="{{ url_for('config_page') }}">Konfiguration</a>.</p>
-  <table>
-    <thead><tr><th>Name</th><th>Beschreibung</th></tr></thead>
-    <tbody>
-      {% for name, meta in catalog.items()|sort %}
-      <tr><td><code>{{ name }}</code></td><td>{{ meta.description }}</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
-
-<div class="card" style="margin-top:14px">
-  <h2>Geladene Quellen (Runtime)</h2>
+  <h2>Geladene Quellen (Runtime — IP-Inhalte)</h2>
   {% if snap.threat_sources %}
   <table>
     <thead><tr><th>Quelle</th><th>Einträge</th></tr></thead>

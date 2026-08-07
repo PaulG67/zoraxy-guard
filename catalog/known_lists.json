@@ -1,0 +1,250 @@
+{
+  "version": 2,
+  "updated": "2026-08-07",
+  "notes": [
+    "Es gibt keine einzelne offizielle 'Liste aller Listen'. Beste Meta-Quellen: FireHOL (iplists.firehol.org) und IPsum (Stamparm).",
+    "reliability: high = strikt / wenig FP, medium = gut für Alarm, low = laut / nur Kontext, avoid = veraltet oder ungeeignet zum Blocken.",
+    "status active = empfohlen, optional = bewusst laut, deprecated = nicht mehr pflegen / nicht aktivieren."
+  ],
+  "sources": {
+    "meta": [
+      {
+        "name": "FireHOL IP Lists",
+        "url": "https://iplists.firehol.org/",
+        "description": "Dashboard mit Update-Frequenz, Größe, Retention und Vergleich vieler Blocklists"
+      },
+      {
+        "name": "FireHOL blocklist-ipsets",
+        "url": "https://github.com/firehol/blocklist-ipsets",
+        "description": "Aggregierte netsets (level1–4) und Doku zu Upstream-Qualität"
+      },
+      {
+        "name": "IPsum",
+        "url": "https://github.com/stamparm/ipsum",
+        "description": "IPs nach Trefferhäufigkeit in vielen Blocklists (Level = Confidence)"
+      }
+    ]
+  },
+  "lists": {
+    "ipsum-level5": {
+      "description": "IPsum level 5 — nur IPs mit hoher Mehrfach-Meldung",
+      "url": "https://raw.githubusercontent.com/stamparm/ipsum/master/levels/5.txt",
+      "format": "plain_ip",
+      "kind": "ip",
+      "reliability": "high",
+      "status": "active",
+      "false_positive_risk": "low",
+      "maintainer": "stamparm / IPsum",
+      "notes": "Strengstes IPsum-Level. Gut fürs Alerting und restriktives Matching."
+    },
+    "ipsum-level4": {
+      "description": "IPsum level 4 — Balance Coverage/Confidence",
+      "url": "https://raw.githubusercontent.com/stamparm/ipsum/master/levels/4.txt",
+      "format": "plain_ip",
+      "kind": "ip",
+      "reliability": "medium",
+      "status": "active",
+      "false_positive_risk": "medium",
+      "maintainer": "stamparm / IPsum",
+      "notes": "Mehr Treffer als level5, etwas lauter."
+    },
+    "ipsum-level3": {
+      "description": "IPsum level 3 — 3+ Listen-Treffer",
+      "url": "https://raw.githubusercontent.com/stamparm/ipsum/master/levels/3.txt",
+      "format": "plain_ip",
+      "kind": "ip",
+      "reliability": "medium",
+      "status": "active",
+      "false_positive_risk": "medium",
+      "maintainer": "stamparm / IPsum",
+      "notes": "Breiter; für reine Alarme ok, kann legitime Scanner mitziehen."
+    },
+    "spamhaus-drop": {
+      "description": "Spamhaus DROP — hijacked / useless netblocks",
+      "url": "https://www.spamhaus.org/drop/drop.txt",
+      "format": "spamhaus",
+      "kind": "ip",
+      "reliability": "high",
+      "status": "active",
+      "false_positive_risk": "very_low",
+      "maintainer": "Spamhaus",
+      "notes": "Sehr etabliert. CDN/ISP selten betroffen. Gute Baseline."
+    },
+    "spamhaus-edrop": {
+      "description": "Spamhaus EDROP — erweiterte DROP-Netze",
+      "url": "https://www.spamhaus.org/drop/edrop.txt",
+      "format": "spamhaus",
+      "kind": "ip",
+      "reliability": "high",
+      "status": "active",
+      "false_positive_risk": "very_low",
+      "maintainer": "Spamhaus",
+      "notes": "Ergänzung zu DROP."
+    },
+    "spamhaus-dropv6": {
+      "description": "Spamhaus DROPv6",
+      "url": "https://www.spamhaus.org/drop/dropv6.txt",
+      "format": "spamhaus",
+      "kind": "ip",
+      "reliability": "high",
+      "status": "active",
+      "false_positive_risk": "very_low",
+      "maintainer": "Spamhaus",
+      "notes": "IPv6-Pendant zu DROP."
+    },
+    "blocklist-de-apache": {
+      "description": "blocklist.de — Web/Apache-Angriffe (48h)",
+      "url": "https://lists.blocklist.de/lists/apache.txt",
+      "format": "plain_ip",
+      "kind": "ip",
+      "reliability": "medium",
+      "status": "active",
+      "false_positive_risk": "medium",
+      "maintainer": "blocklist.de",
+      "notes": "Community-Reports (fail2ban). Gut für Web-Scans, dynamische IPs möglich."
+    },
+    "blocklist-de-bruteforce": {
+      "description": "blocklist.de — Brute-Force Logins",
+      "url": "https://lists.blocklist.de/lists/bruteforcelogin.txt",
+      "format": "plain_ip",
+      "kind": "ip",
+      "reliability": "medium",
+      "status": "active",
+      "false_positive_risk": "medium",
+      "maintainer": "blocklist.de",
+      "notes": "Kurzlebig, 48h-Fenster. Gut als Alarm-Signal."
+    },
+    "blocklist-de-ssh": {
+      "description": "blocklist.de — SSH-Angriffe",
+      "url": "https://lists.blocklist.de/lists/ssh.txt",
+      "format": "plain_ip",
+      "kind": "ip",
+      "reliability": "medium",
+      "status": "active",
+      "false_positive_risk": "medium",
+      "maintainer": "blocklist.de",
+      "notes": "Für Homelab-Web-Proxy eher optional; eher Honeypot-SSH."
+    },
+    "blocklist-de-all": {
+      "description": "blocklist.de — alle gemeldeten Angreifer",
+      "url": "https://lists.blocklist.de/lists/all.txt",
+      "format": "plain_ip",
+      "kind": "ip",
+      "reliability": "medium",
+      "status": "optional",
+      "false_positive_risk": "high",
+      "maintainer": "blocklist.de",
+      "notes": "Sehr laut. Besser Einzel-Listen (apache/bruteforce) nutzen."
+    },
+    "feodo-ip": {
+      "description": "abuse.ch Feodo Tracker — Botnet C2",
+      "url": "https://feodotracker.abuse.ch/downloads/ipblocklist.txt",
+      "format": "plain_ip",
+      "kind": "ip",
+      "reliability": "high",
+      "status": "active",
+      "false_positive_risk": "low",
+      "maintainer": "abuse.ch",
+      "notes": "Fokussiert Malware/C2. Wenig FP, hohe Relevanz."
+    },
+    "sslbl-ip": {
+      "description": "abuse.ch SSLBL — Botnet C2 IPs (CSV)",
+      "url": "https://sslbl.abuse.ch/blacklist/sslipblacklist.csv",
+      "format": "abusech_csv",
+      "kind": "ip",
+      "reliability": "high",
+      "status": "active",
+      "false_positive_risk": "low",
+      "maintainer": "abuse.ch",
+      "notes": "C2 über SSL/TLS-Infrastruktur."
+    },
+    "firehol-level1": {
+      "description": "FireHOL level1 — konservative Aggregation",
+      "url": "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/firehol_level1.netset",
+      "format": "plain_ip",
+      "kind": "ip",
+      "reliability": "high",
+      "status": "active",
+      "false_positive_risk": "low",
+      "maintainer": "FireHOL",
+      "notes": "Meta-List (DShield, Feodo, Spamhaus DROP, …). Gut dokumentiert auf iplists.firehol.org."
+    },
+    "firehol-level2": {
+      "description": "FireHOL level2 — aggressiver",
+      "url": "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/firehol_level2.netset",
+      "format": "plain_ip",
+      "kind": "ip",
+      "reliability": "medium",
+      "status": "optional",
+      "false_positive_risk": "medium",
+      "maintainer": "FireHOL",
+      "notes": "Mehr Coverage, etwas mehr FP. Für Alarme ok."
+    },
+    "firehol-level3": {
+      "description": "FireHOL level3 — aggressiv",
+      "url": "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/firehol_level3.netset",
+      "format": "plain_ip",
+      "kind": "ip",
+      "reliability": "low",
+      "status": "optional",
+      "false_positive_risk": "high",
+      "maintainer": "FireHOL",
+      "notes": "Eher Monitoring, nicht hard-block."
+    },
+    "cinsscore-ci-badguys": {
+      "description": "CINS Army bad guys list",
+      "url": "https://cinsscore.com/list/ci-badguys.txt",
+      "format": "plain_ip",
+      "kind": "ip",
+      "reliability": "medium",
+      "status": "active",
+      "false_positive_risk": "medium",
+      "maintainer": "CINS / Sentinel",
+      "notes": "Reputation aus Sentinel-Netzwerk."
+    },
+    "greensnow": {
+      "description": "GreenSnow — Honeypot-basierte Liste",
+      "url": "https://blocklist.greensnow.co/greensnow.txt",
+      "format": "plain_ip",
+      "kind": "ip",
+      "reliability": "medium",
+      "status": "optional",
+      "false_positive_risk": "medium",
+      "maintainer": "GreenSnow",
+      "notes": "Nützlich als Zusatz-Signal."
+    },
+    "dshield-top": {
+      "description": "DShield / SANS top attacking class-C",
+      "url": "https://feeds.dshield.org/block.txt",
+      "format": "plain_ip",
+      "kind": "ip",
+      "reliability": "medium",
+      "status": "active",
+      "false_positive_risk": "medium",
+      "maintainer": "SANS ISC DShield",
+      "notes": "Oft Class-C-Netze; Parser nimmt erste IP/CIDR-Tokens. Etwas grob."
+    },
+    "tor-exit-nodes": {
+      "description": "Tor Exit Nodes (Bulk)",
+      "url": "https://check.torproject.org/torbulkexitlist",
+      "format": "plain_ip",
+      "kind": "ip",
+      "reliability": "low",
+      "status": "optional",
+      "false_positive_risk": "high",
+      "maintainer": "Tor Project",
+      "notes": "Tor ist oft legitim. Nur aktivieren, wenn Tor-Traffic bei dir unerwünscht ist."
+    },
+    "openbl": {
+      "description": "OpenBL (historisch / abgeschaltet)",
+      "url": "https://www.openbl.org/lists/base.txt",
+      "format": "plain_ip",
+      "kind": "ip",
+      "reliability": "avoid",
+      "status": "deprecated",
+      "false_positive_risk": "high",
+      "maintainer": "OpenBL (defunkt)",
+      "notes": "Projekt existiert so nicht mehr zuverlässig. Nicht verwenden."
+    }
+  }
+}
