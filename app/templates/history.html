@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}History · {{ app_name }}{% endblock %}
+{% block content %}
+<section class="block">
+  <h2 style="margin:0 0 6px;font-size:1.15rem;">Zugriffshistorie</h2>
+  <p class="hint" style="margin-top:0;">
+    Nur im Arbeitsspeicher (Ring-Buffer, max. {{ data.buffer.max }} Einträge · ~{{ data.buffer.retention_hours }}&nbsp;h).
+    Keine Speicherung auf Disk — nach Neustart leer. Derzeit {{ data.buffer.size }} Einträge im Puffer
+    (gesamt verarbeitet: {{ data.buffer.recorded_total }}).
+  </p>
+</section>
+
+<form class="card hist-filters" method="get" action="{{ url_for('history_page') }}">
+  <div class="hist-filter-row">
+    <div>
+      <label for="w">Zeitfenster</label>
+      <select name="w" id="w" onchange="this.form.submit()">
+        {% for key, label in [('1h','1 Stunde'),('6h','6 Stunden'),('12h','12 Stunden'),('24h','24 Stunden')] %}
+          <option value="{{ key }}" {% if data.window == key %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="view">Gruppierung</label>
+      <select name="view" id="view" onchange="this.form.submit()">
+        <option value="app" {% if data.view == 'app' %}selected{% endif %}>Nach App / Host</option>
+        <option value="ip" {% if data.view == 'ip' %}selected{% endif %}>Nach Client-IP</option>
+      </select>
+    </div>
+    <div class="hist-search">
+      <label for="q">Filter</label>
+      <input type="text" name="q" id="q" value="{{ data.query }}" placeholder="IP, Host oder Pfad…" autocomplete="off">
+    </div>
+    <div class="hist-go">
+      <label>&nbsp;</label>
+      <button type="submit" class="primary">Anzeigen</button>
+    </div>
+  </div>
+</form>
+
+<div class="grid stats">
+  <div class="card">
+    <div class="stat-label">Requests im Fenster</div>
+    <div class="stat-value">{{ data.total_in_window }}</div>
+  </div>
+  <div class="card">
+    <div class="stat-label">Apps / Hosts</div>
+    <div class="stat-value">{{ data.unique_apps }}</div>
+  </div>
+  <div class="card">
+    <div class="stat-label">Client-IPs</div>
+    <div class="stat-value">{{ data.unique_ips }}</div>
+  </div>
+  <div class="card">
+    <div class="stat-label">Gruppen</div>
+    <div class="stat-value">{{ data.groups|length }}</div>
+  </div>
+</div>
+
+{% if not data.groups %}
+  <div class="card">
+    <p class="muted" style="margin:0;">
+      Keine Zugriffe im gewählten Fenster
+      {% if data.query %}(Filter «{{ data.query }}»){% endif %}.
+      History füllt sich, sobald Zoraxy Log-Zeilen eintreffen.
+    </p>
+  </div>
+{% else %}
+  <div class="hist-groups">
+    {% for g in data.groups %}
+      <details class="card hist-group">
+        <summary>
+          <div class="hist-group-main">
+            <span class="hist-key mono">{{ g.key }}</span>
+            <span class="hist-meta">
+              <span class="badge">{{ g.count }} Req</span>
+              <span class="muted">
+                {% if data.view == 'app' %}{{ g.unique_partners }} IPs{% else %}{{ g.unique_partners }} Hosts{% endif %}
+              </span>
+              <span class="muted">zuletzt {{ time.strftime('%H:%M:%S', time.localtime(g.last_ts)) }}</span>
+            </span>
+          </div>
+          <div class="hist-chips">
+            {% for m, c in g.method_top %}
+              <span class="chip">{{ m }} ×{{ c }}</span>
+            {% endfor %}
+            {% for s, c in g.status_top %}
+              <span class="chip st-{{ s[0] if s|length else 'x' }}">{{ s }} ×{{ c }}</span>
+            {% endfor %}
+          </div>
+        </summary>
+
+        <div class="hist-body">
+          {% if g.partners_top %}
+            <div class="hist-partners">
+              <span class="muted" style="font-size:0.8rem;">
+                Top {% if data.view == 'app' %}Clients{% else %}Apps{% endif %}:
+              </span>
+              {% for p, c in g.partners_top %}
+                <a class="chip linkish" href="{{ url_for('history_page', w=data.window, view=data.view, q=p) }}">{{ p }} <small>×{{ c }}</small></a>
+              {% endfor %}
+            </div>
+          {% endif %}
+
+          <div class="hist-table-wrap">
+            <table class="hist-table">
+              <thead>
+                <tr>
+                  <th>Zeit</th>
+                  {% if data.view == 'app' %}<th>Client</th>{% else %}<th>App / Host</th>{% endif %}
+                  <th>Methode</th>
+                  <th>Pfad</th>
+                  <th>Status</th>
+                  <th>Router</th>
+                  <th>User-Agent</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for s in g.samples %}
+                  <tr>
+                    <td class="mono nowrap">{{ time.strftime('%H:%M:%S', time.localtime(s.ts)) }}</td>
+                    <td class="mono">
+                      {% if data.view == 'app' %}
+                        <a href="{{ url_for('history_page', w=data.window, view='ip', q=s.client) }}">{{ s.client }}</a>
+                      {% else %}
+                        <a href="{{ url_for('history_page', w=data.window, view='app', q=s.origin) }}">{{ s.origin }}</a>
+                      {% endif %}
+                    </td>
+                    <td class="mono">{{ s.method }}</td>
+                    <td class="mono path-cell" title="{{ s.path }}">{{ s.path }}</td>
+                    <td><span class="st-badge st-{{ (s.status // 100) if s.status else 0 }}">{{ s.status or '—' }}</span></td>
+                    <td class="muted mono">{{ s.router or '—' }}</td>
+                    <td class="muted ua-cell" title="{{ s.ua }}">{{ s.ua or '—' }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% if g.count > g.samples|length %}
+            <p class="hint">Zeigt die neuesten {{ g.samples|length }} von {{ g.count }} Requests in dieser Gruppe.</p>
+          {% endif %}
+        </div>
+      </details>
+    {% endfor %}
+  </div>
+{% endif %}
+{% endblock %}

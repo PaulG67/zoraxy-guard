@@ -9,6 +9,7 @@ from typing import Any, Deque, Dict, List, Optional
 from .alerter import Alerter
 from .detectors import Alert, Detector
 from .feeds import ThreatLists, find_list_match
+from .history import AccessHistory, DEFAULT_MAX_EVENTS
 from .iputil import parse_ip
 from .parser import LogEvent
 
@@ -134,6 +135,9 @@ class Runtime:
     log_files: List[str] = field(default_factory=list)
 
     recent_alerts: Deque[dict] = field(default_factory=lambda: deque(maxlen=100))
+    history: AccessHistory = field(
+        default_factory=lambda: AccessHistory(max_events=DEFAULT_MAX_EVENTS)
+    )
     reload_requested: bool = False
     lists_reload_requested: bool = False
 
@@ -171,6 +175,7 @@ class Runtime:
                 "threat_networks": net_count,
                 "recent_alerts": list(self.recent_alerts)[:50],
                 "config_path": self.config_path,
+                "history_buffer": self.history.buffer_info(),
             }
 
 

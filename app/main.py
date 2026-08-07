@@ -17,6 +17,7 @@ from .detectors import Detector
 from .envconfig import apply_env_overrides
 from .feeds import load_all_threat_lists
 from .iputil import load_networks
+from .history import DEFAULT_MAX_EVENTS
 from .parser import parse_line
 from .runtime import Runtime
 from .webui import start_web_server
@@ -151,6 +152,7 @@ def run(config_path: str) -> None:
 
     tailer = Tailer(directory, pattern, offsets, from_end)
 
+    hist_max = int(cfg.get("history_max_events") or DEFAULT_MAX_EVENTS)
     runtime = Runtime(
         config_path=config_path,
         cfg=cfg,
@@ -162,6 +164,7 @@ def run(config_path: str) -> None:
         watching=f"{directory}/{pattern}",
         log_files=[os.path.basename(f) for f in list_log_files(directory, pattern)[-8:]],
     )
+    runtime.history.set_max_events(hist_max)
     rt.RUNTIME = runtime
 
     start_web_server(config_path)
@@ -205,6 +208,9 @@ def run(config_path: str) -> None:
                     runtime.log_files = [
                         os.path.basename(f) for f in list_log_files(directory, pattern)[-8:]
                     ]
+                    runtime.history.set_max_events(
+                        int(cfg.get("history_max_events") or DEFAULT_MAX_EVENTS)
+                    )
                 refresh_hours = float(cfg.get("lists_refresh_hours") or 24)
                 last_feed = time.time()
                 log.info("Configuration reloaded from UI/file")
@@ -237,8 +243,10 @@ def run(config_path: str) -> None:
                 runtime.last_line_at = now
                 det = runtime.detector
                 alt = runtime.alerter
+                hist = runtime.history
             for line in lines:
                 event = parse_line(line)
+                hist.record(event)
                 if not det or not alt:
                     break
                 for alert in det.process(event):

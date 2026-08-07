@@ -117,6 +117,22 @@ def create_app(config_path: str) -> Flask:
         snap = rt.RUNTIME.snapshot() if rt.RUNTIME else {}
         return render_template("dashboard.html", snap=snap, time=time)
 
+    @app.route("/history")
+    @login_required
+    def history_page():
+        if not rt.RUNTIME:
+            flash("Runtime nicht bereit.", "error")
+            return redirect(url_for("dashboard"))
+        window = (request.args.get("w") or "1h").strip().lower()
+        if window not in ("1h", "6h", "12h", "24h"):
+            window = "1h"
+        view = (request.args.get("view") or "app").strip().lower()
+        if view not in ("app", "ip"):
+            view = "app"
+        q = (request.args.get("q") or "").strip()
+        data = rt.RUNTIME.history.snapshot(window=window, view=view, q=q)
+        return render_template("history.html", data=data, time=time)
+
     @app.route("/config", methods=["GET", "POST"])
     @login_required
     def config_page():

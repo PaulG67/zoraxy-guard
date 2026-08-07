@@ -136,3 +136,7 @@ bad_user_agents:
   - wget/
 
 state_file: /data/state.json
+
+# Access history (Web-UI only, RAM ring — never written to disk)
+# Keeps the newest N requests, max ~24h; older entries are discarded.
+history_max_events: 15000
