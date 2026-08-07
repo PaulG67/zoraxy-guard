@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}Konfiguration · {{ app_name }}{% endblock %}
+{% block content %}
+
+<div class="tabs">
+  <a href="#form" class="active" onclick="showTab('form', this); return false;">Formular</a>
+  <a href="#yaml" onclick="showTab('yaml', this); return false;">Raw YAML</a>
+</div>
+
+<div id="tab-form">
+<form method="post" class="card">
+  <input type="hidden" name="mode" value="form">
+  <h2>Logs</h2>
+  <div class="row2">
+    <div>
+      <label>Log-Verzeichnis</label>
+      <input type="text" name="log_directory" value="{{ cfg.get('log', {}).get('directory', '/logs') }}">
+    </div>
+    <div>
+      <label>Pattern</label>
+      <input type="text" name="log_pattern" value="{{ cfg.get('log', {}).get('pattern', 'zr_*.log') }}">
+    </div>
+  </div>
+  <div class="row2">
+    <div>
+      <label>Poll-Interval (s)</label>
+      <input type="number" step="0.5" name="poll_interval" value="{{ cfg.get('log', {}).get('poll_interval', 2) }}">
+    </div>
+    <div>
+      <label>Listen-Refresh (Stunden)</label>
+      <input type="number" step="1" name="lists_refresh_hours" value="{{ cfg.get('lists_refresh_hours', 24) }}">
+    </div>
+  </div>
+  <label><input type="checkbox" name="tail_from_end" {% if cfg.get('log', {}).get('tail_from_end', true) %}checked{% endif %}> Nur neue Logzeilen (tail from end)</label>
+
+  <section class="block">
+    <h2>IP-Listen</h2>
+    <label>Allowlist (eine pro Zeile oder Komma)</label>
+    <textarea name="allowlist_ips">{{ as_text(cfg.get('allowlist_ips')) }}</textarea>
+    <label>Blocklist IPs</label>
+    <textarea name="blocklist_ips">{{ as_text(cfg.get('blocklist_ips')) }}</textarea>
+  </section>
+
+  <section class="block">
+    <h2>Bekannte Threat-Datenbanken</h2>
+    <div class="checks">
+      {% for name, meta in catalog.items()|sort %}
+      <label class="check">
+        <input type="checkbox" name="known_lists" value="{{ name }}" {% if name in enabled %}checked{% endif %}>
+        <span>
+          <code>{{ name }}</code>
+          <small>{{ meta.description }}</small>
+        </span>
+      </label>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="block">
+    <h2>Hosts & Erkennung</h2>
+    <label>Sensible Hosts</label>
+    <textarea name="sensitive_hosts">{{ as_text(cfg.get('sensitive_hosts')) }}</textarea>
+    <label>Exploit-Pfade</label>
+    <textarea name="exploit_paths">{{ as_text(cfg.get('exploit_paths')) }}</textarea>
+    <label>Bad User-Agents</label>
+    <textarea name="bad_user_agents">{{ as_text(cfg.get('bad_user_agents')) }}</textarea>
+    <label><input type="checkbox" name="alert_sensitive_success" {% if cfg.get('alert_sensitive_success') %}checked{% endif %}> Alarm bei erfolgreichem Zugriff auf sensible Hosts (kann laut sein)</label>
+  </section>
+
+  <section class="block">
+    <h2>Schwellwerte</h2>
+    <div class="row2">
+      <div>
+        <label>Exploit-Hits für Alarm</label>
+        <input type="number" name="exploit_hits_for_alert" value="{{ cfg.get('thresholds', {}).get('exploit_hits_for_alert', 3) }}">
+      </div>
+      <div>
+        <label>Exploit-Fenster (s)</label>
+        <input type="number" name="exploit_window_seconds" value="{{ cfg.get('thresholds', {}).get('exploit_window_seconds', 120) }}">
+      </div>
+      <div>
+        <label>Block-Hits für Alarm</label>
+        <input type="number" name="block_hits_for_alert" value="{{ cfg.get('thresholds', {}).get('block_hits_for_alert', 30) }}">
+      </div>
+      <div>
+        <label>Block-Fenster (s)</label>
+        <input type="number" name="block_window_seconds" value="{{ cfg.get('thresholds', {}).get('block_window_seconds', 300) }}">
+      </div>
+      <div>
+        <label>Auth-Fails für Alarm</label>
+        <input type="number" name="auth_fail_for_alert" value="{{ cfg.get('thresholds', {}).get('auth_fail_for_alert', 15) }}">
+      </div>
+      <div>
+        <label>Auth-Fail-Fenster (s)</label>
+        <input type="number" name="auth_fail_window_seconds" value="{{ cfg.get('thresholds', {}).get('auth_fail_window_seconds', 300) }}">
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2>Alarme</h2>
+    <div class="row2">
+      <div>
+        <label>Min. Severity</label>
+        <select name="min_severity">
+          {% for s in ['info','low','medium','high','critical'] %}
+          <option value="{{ s }}" {% if cfg.get('alerts', {}).get('min_severity', 'medium') == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label>Cooldown (s)</label>
+        <input type="number" name="cooldown_seconds" value="{{ cfg.get('alerts', {}).get('cooldown_seconds', 300) }}">
+      </div>
+    </div>
+    <label><input type="checkbox" name="stdout" {% if cfg.get('alerts', {}).get('stdout', true) %}checked{% endif %}> Auch ins Container-Log schreiben</label>
+
+    <label>Discord Webhook</label>
+    <input type="text" name="discord_webhook" value="{{ cfg.get('alerts', {}).get('discord_webhook', '') }}" autocomplete="off">
+
+    <div class="row2">
+      <div>
+        <label>Telegram Bot Token</label>
+        <input type="password" name="telegram_bot_token" value="{{ cfg.get('alerts', {}).get('telegram_bot_token', '') }}" autocomplete="off">
+      </div>
+      <div>
+        <label>Telegram Chat ID</label>
+        <input type="text" name="telegram_chat_id" value="{{ cfg.get('alerts', {}).get('telegram_chat_id', '') }}">
+      </div>
+    </div>
+
+    <div class="row2">
+      <div>
+        <label>Pushover User Key</label>
+        <input type="password" name="pushover_user_key" value="{{ cfg.get('alerts', {}).get('pushover', {}).get('user_key', '') }}" autocomplete="off">
+      </div>
+      <div>
+        <label>Pushover API Token</label>
+        <input type="password" name="pushover_api_token" value="{{ cfg.get('alerts', {}).get('pushover', {}).get('api_token', '') }}" autocomplete="off">
+      </div>
+      <div>
+        <label>Pushover Device (optional)</label>
+        <input type="text" name="pushover_device" value="{{ cfg.get('alerts', {}).get('pushover', {}).get('device', '') }}">
+      </div>
+      <div>
+        <label>Pushover Sound (optional)</label>
+        <input type="text" name="pushover_sound" value="{{ cfg.get('alerts', {}).get('pushover', {}).get('sound', '') }}">
+      </div>
+    </div>
+
+    <label>Generic Webhook</label>
+    <input type="text" name="generic_webhook" value="{{ cfg.get('alerts', {}).get('generic_webhook', '') }}">
+
+    <p class="hint">Hinweis: Env-Variablen (z. B. PUSHOVER_API_TOKEN im Unraid-Template) überschreiben beim Laden ggf. Datei-Werte zur Laufzeit. Für dauerhafte Secrets beides oder nur die Datei nutzen.</p>
+  </section>
+
+  <div class="actions">
+    <button class="primary" type="submit">Speichern &amp; anwenden</button>
+  </div>
+</form>
+</div>
+
+<div id="tab-yaml" style="display:none">
+<form method="post" class="card">
+  <input type="hidden" name="mode" value="yaml">
+  <h2>Raw YAML</h2>
+  <p class="muted">Gesamte config.yaml – nur speichern, wenn du YAML kennst.</p>
+  <textarea class="yaml" name="yaml_text">{{ yaml_text }}</textarea>
+  <div class="actions">
+    <button class="primary" type="submit">YAML speichern &amp; anwenden</button>
+  </div>
+</form>
+</div>
+
+<script>
+function showTab(name, el) {
+  document.getElementById('tab-form').style.display = name === 'form' ? '' : 'none';
+  document.getElementById('tab-yaml').style.display = name === 'yaml' ? '' : 'none';
+  document.querySelectorAll('.tabs a').forEach(a => a.classList.remove('active'));
+  el.classList.add('active');
+}
+</script>
+{% endblock %}

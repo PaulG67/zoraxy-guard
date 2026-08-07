@@ -8,12 +8,27 @@ Monitors [Zoraxy](https://github.com/tobychui/zoraxy) reverse-proxy logs for:
 - block storms and brute-force patterns
 - optional successful access to sensitive hosts
 
-Alerts via **Discord**, **Telegram**, generic webhook, and container logs.
+**Built-in Web GUI** on port **8787** for configuration, status, threat lists, and test alerts.
+
+Alerts via **Discord**, **Telegram**, **Pushover**, generic webhook, and container logs.
 
 Image (after CI is enabled): `ghcr.io/paulg67/zoraxy-guard:latest`
 
 Until the GHCR image is published, build from this repo on Unraid (see below).
 
+## Web UI
+
+After start: `http://UNRAID-IP:8787`
+
+| Page | Function |
+|---|---|
+| Status | live counters, recent alerts, reload lists, send test alert |
+| Konfiguration | form + raw YAML editor (saves `config.yaml` and reloads) |
+| Listen | local list files + catalog |
+
+Set `WEB_PASSWORD` (recommended). Disable with `WEB_ENABLED=false`.
+
+**Important:** mount `config.yaml` **read-write** (not `:ro`) so the GUI can save.
 ## Unraid install (Docker Compose Manager)
 
 1. Create folders:
@@ -31,22 +46,26 @@ Until the GHCR image is published, build from this repo on Unraid (see below).
    services:
      zoraxy-guard:
        build: https://github.com/PaulG67/zoraxy-guard.git#main
-       # image: ghcr.io/paulg67/zoraxy-guard:latest
        container_name: zoraxy-guard
        restart: unless-stopped
+       ports:
+         - "8787:8787"
        environment:
          TZ: Europe/Zurich
+         WEB_PASSWORD: "change-me"
          DISCORD_WEBHOOK: "https://discord.com/api/webhooks/..."
+         # PUSHOVER_USER_KEY: "u..."
+         # PUSHOVER_API_TOKEN: "a..."
          KNOWN_LISTS: "ipsum-level5,blocklist-de-apache,blocklist-de-bruteforce,feodo-ip"
          ALLOWLIST_IPS: "192.168.0.0/16,10.0.0.0/8"
        volumes:
          - /mnt/user/appdata/zoraxy/log:/logs:ro
-         - /mnt/user/appdata/zoraxy-guard/config.yaml:/config/config.yaml:ro
+         - /mnt/user/appdata/zoraxy-guard/config.yaml:/config/config.yaml
          - /mnt/user/appdata/zoraxy-guard/data:/data
    ```
 4. Adjust the **Zoraxy log path** if yours differs.
-5. Start the stack. Check logs: `docker logs -f zoraxy-guard`
-
+5. Start the stack. Open **http://UNRAID-IP:8787**
+6. Check logs: `docker logs -f zoraxy-guard`
 ### Publish prebuilt image (optional)
 
 The GitHub Actions workflow lives at [`devtools/docker-publish.yml`](devtools/docker-publish.yml). To enable automatic GHCR builds:

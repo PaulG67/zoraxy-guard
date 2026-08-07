@@ -61,11 +61,11 @@ class Alerter:
         self.cooldowns[fingerprint] = now
         return False
 
-    def send(self, alert: Alert, now: float) -> None:
+    def send(self, alert: Alert, now: float) -> bool:
         if not severity_at_least(alert.severity, self.min_severity):
-            return
+            return False
         if self._cooled(alert.fingerprint, now):
-            return
+            return False
 
         title = f"[Zoraxy Guard][{alert.severity.upper()}] {alert.title}"
         body = alert.body
@@ -83,7 +83,7 @@ class Alerter:
             self._pushover(title, body, alert.severity)
         if self.generic:
             self._generic(title, body, alert)
-
+        return True
     def _discord(self, title: str, body: str, severity: str) -> None:
         color = {
             "info": 0x808080,

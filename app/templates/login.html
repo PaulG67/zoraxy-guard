@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Login · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="card login-box">
+  <h2>Login</h2>
+  <p class="muted">Passwort aus WEB_PASSWORD</p>
+  <form method="post">
+    <label for="password">Passwort</label>
+    <input id="password" type="password" name="password" autofocus required>
+    <div class="actions">
+      <button class="primary" type="submit">Anmelden</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

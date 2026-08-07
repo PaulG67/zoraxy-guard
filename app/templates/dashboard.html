@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Status · {{ app_name }}{% endblock %}
+{% block content %}
+
+<div class="grid stats">
+  <div class="card">
+    <div class="stat-label">Zeilen verarbeitet</div>
+    <div class="stat-value">{{ snap.lines_processed or 0 }}</div>
+  </div>
+  <div class="card">
+    <div class="stat-label">Alarme gesendet</div>
+    <div class="stat-value">{{ snap.alerts_sent or 0 }}</div>
+  </div>
+  <div class="card">
+    <div class="stat-label">Threat-Networks</div>
+    <div class="stat-value">{{ snap.threat_networks or 0 }}</div>
+  </div>
+  <div class="card">
+    <div class="stat-label">Quellen geladen</div>
+    <div class="stat-value">{{ (snap.threat_sources or {})|length }}</div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Überwachung</h2>
+  <p><strong>Logs:</strong> <code>{{ snap.watching or '—' }}</code></p>
+  <p class="muted">Config: <code>{{ snap.config_path }}</code></p>
+  {% if snap.last_error %}
+    <p class="flash error">Letzter Fehler: {{ snap.last_error }}</p>
+  {% endif %}
+  {% if snap.log_files %}
+    <p class="muted">Dateien: {{ snap.log_files|join(', ') }}</p>
+  {% endif %}
+</div>
+
+<div class="actions">
+  <form method="post" action="{{ url_for('action_test_alert') }}">
+    <button class="primary" type="submit">Test-Alarm senden</button>
+  </form>
+  <form method="post" action="{{ url_for('action_reload_lists') }}">
+    <button type="submit">Listen neu laden</button>
+  </form>
+  <form method="post" action="{{ url_for('action_reload_config') }}">
+    <button type="submit">Config neu laden</button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Threat-Quellen</h2>
+  {% if snap.threat_sources %}
+  <table>
+    <thead><tr><th>Quelle</th><th>Einträge</th></tr></thead>
+    <tbody>
+      {% for name, count in snap.threat_sources.items()|sort %}
+      <tr><td><code>{{ name }}</code></td><td>{{ count }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">Noch keine Listen geladen.</p>
+  {% endif %}
+</div>
+
+<div class="card" style="margin-top:14px">
+  <h2>Letzte Alarme</h2>
+  {% if snap.recent_alerts %}
+  <table>
+    <thead><tr><th>Zeit</th><th>Severity</th><th>Titel</th><th>Detail</th></tr></thead>
+    <tbody>
+      {% for a in snap.recent_alerts %}
+      <tr>
+        <td class="muted">{{ time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(a.ts)) if a.ts else '—' }}</td>
+        <td class="sev {{ a.severity }}">{{ a.severity }}</td>
+        <td>{{ a.title }}</td>
+        <td class="muted">{{ a.body }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">Noch keine Alarme in dieser Laufzeit.</p>
+  {% endif %}
+</div>
+
+{% endblock %}

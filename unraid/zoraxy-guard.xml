@@ -10,10 +10,10 @@
   <Support>https://github.com/PaulG67/zoraxy-guard/issues</Support>
   <Project>https://github.com/PaulG67/zoraxy-guard</Project>
   <Overview>
-Zoraxy Guard overwacht Zoraxy-Logs auf Exploit-Scans, bekannte bösartige IPs (öffentliche Threat-Listen + eigene Listen) und Auth-Anomalien. Alarme per Discord, Telegram, Pushover oder Webhook.
+Zoraxy Guard overwacht Zoraxy-Logs auf Exploit-Scans, bekannte bösartige IPs und Auth-Anomalien. Web-UI auf Port 8787. Alarme per Discord, Telegram, Pushover oder Webhook.
   </Overview>
   <Category>Security: Network:Other Tools:</Category>
-  <WebUI/>
+  <WebUI>http://[IP]:[PORT:8787]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/PaulG67/zoraxy-guard/main/unraid/zoraxy-guard.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/PaulG67/zoraxy-guard/main/assets/icon.png</Icon>
   <ExtraParams/>
@@ -22,11 +22,14 @@ Zoraxy Guard overwacht Zoraxy-Logs auf Exploit-Scans, bekannte bösartige IPs (�
   <DateInstalled/>
   <DonateText/>
   <DonateLink/>
-  <Requires>Zoraxy log folder mounted read-only</Requires>
+  <Requires>Zoraxy log folder mounted read-only; config.yaml writable for GUI</Requires>
+  <Config Name="WebUI Port" Target="8787" Default="8787" Mode="tcp" Description="Web UI port" Type="Port" Display="always" Required="true" Mask="false">8787</Config>
   <Config Name="Zoraxy Logs" Target="/logs" Default="/mnt/user/appdata/zoraxy/log" Mode="ro" Description="Zoraxy log directory (zr_*.log)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/zoraxy/log</Config>
-  <Config Name="Config File" Target="/config/config.yaml" Default="/mnt/user/appdata/zoraxy-guard/config.yaml" Mode="ro" Description="Path to config.yaml" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/zoraxy-guard/config.yaml</Config>
+  <Config Name="Config File" Target="/config/config.yaml" Default="/mnt/user/appdata/zoraxy-guard/config.yaml" Mode="rw" Description="Path to config.yaml (writable for GUI)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/zoraxy-guard/config.yaml</Config>
   <Config Name="Data" Target="/data" Default="/mnt/user/appdata/zoraxy-guard/data" Mode="rw" Description="State, local lists, feed cache" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/zoraxy-guard/data</Config>
   <Config Name="Timezone" Target="TZ" Default="Europe/Zurich" Mode="rw" Description="Timezone" Type="Variable" Display="always" Required="false" Mask="false">Europe/Zurich</Config>
+  <Config Name="Web Password" Target="WEB_PASSWORD" Default="" Mode="rw" Description="Password for Web UI (empty = no login)" Type="Variable" Display="always" Required="false" Mask="true"/>
+  <Config Name="Web Port (inside)" Target="WEB_PORT" Default="8787" Mode="rw" Description="Internal web port" Type="Variable" Display="advanced" Required="false" Mask="false">8787</Config>
   <Config Name="Discord Webhook" Target="DISCORD_WEBHOOK" Default="" Mode="rw" Description="Optional Discord webhook URL" Type="Variable" Display="always" Required="false" Mask="true"/>
   <Config Name="Telegram Bot Token" Target="TELEGRAM_BOT_TOKEN" Default="" Mode="rw" Description="Optional Telegram bot token" Type="Variable" Display="always" Required="false" Mask="true"/>
   <Config Name="Telegram Chat ID" Target="TELEGRAM_CHAT_ID" Default="" Mode="rw" Description="Optional Telegram chat id" Type="Variable" Display="always" Required="false" Mask="false"/>

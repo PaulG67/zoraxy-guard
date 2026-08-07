@@ -1,0 +1,304 @@
+from __future__ import annotations
+
+import logging
+import os
+import secrets
+import threading
+import time
+from functools import wraps
+from pathlib import Path
+from typing import Any, Callable, Optional
+
+import yaml
+from flask import (
+    Flask,
+    flash,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
+from werkzeug.serving import make_server
+
+from . import runtime as rt
+from .detectors import Alert
+from .envconfig import apply_env_overrides
+from .feeds import KNOWN_LIST_CATALOG
+
+log = logging.getLogger("zoraxy-guard.web")
+
+
+def _public_cfg(cfg: dict) -> dict:
+    return {k: v for k, v in cfg.items() if not str(k).startswith("_")}
+
+
+def _load_yaml_file(path: str) -> dict:
+    with open(path, "r", encoding="utf-8") as fh:
+        return yaml.safe_load(fh) or {}
+
+
+def _save_yaml_file(path: str, cfg: dict) -> None:
+    data = _public_cfg(cfg)
+    text = yaml.safe_dump(data, sort_keys=False, allow_unicode=True, default_flow_style=False)
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:
+        fh.write(text)
+    os.replace(tmp, path)
+
+
+def _as_list(text: str) -> list:
+    items = []
+    for part in text.replace(",", "\n").splitlines():
+        part = part.strip()
+        if part:
+            items.append(part)
+    return items
+
+
+def _as_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, list):
+        return "\n".join(str(x) for x in value)
+    return str(value)
+
+
+def create_app(config_path: str) -> Flask:
+    app = Flask(
+        __name__,
+        template_folder=str(Path(__file__).parent / "templates"),
+        static_folder=str(Path(__file__).parent / "static"),
+    )
+    app.secret_key = os.environ.get("WEB_SECRET") or secrets.token_hex(24)
+    password = (os.environ.get("WEB_PASSWORD") or "").strip()
+
+    def login_required(fn: Callable):
+        @wraps(fn)
+        def wrapper(*args, **kwargs):
+            if password and not session.get("auth"):
+                return redirect(url_for("login", next=request.path))
+            return fn(*args, **kwargs)
+
+        return wrapper
+
+    @app.context_processor
+    def inject_globals():
+        return {"app_name": "Zoraxy Guard", "has_password": bool(password)}
+
+    @app.route("/login", methods=["GET", "POST"])
+    def login():
+        if not password:
+            return redirect(url_for("dashboard"))
+        if request.method == "POST":
+            if request.form.get("password") == password:
+                session["auth"] = True
+                return redirect(request.args.get("next") or url_for("dashboard"))
+            flash("Falsches Passwort.", "error")
+        return render_template("login.html")
+
+    @app.route("/logout")
+    def logout():
+        session.clear()
+        return redirect(url_for("login" if password else "dashboard"))
+
+    @app.route("/")
+    @login_required
+    def dashboard():
+        snap = rt.RUNTIME.snapshot() if rt.RUNTIME else {}
+        return render_template("dashboard.html", snap=snap, time=time)
+
+    @app.route("/config", methods=["GET", "POST"])
+    @login_required
+    def config_page():
+        if not rt.RUNTIME:
+            flash("Runtime nicht bereit.", "error")
+            return redirect(url_for("dashboard"))
+
+        if request.method == "POST":
+            mode = request.form.get("mode", "form")
+            try:
+                if mode == "yaml":
+                    raw = request.form.get("yaml_text") or ""
+                    loaded = yaml.safe_load(raw) or {}
+                    if not isinstance(loaded, dict):
+                        raise ValueError("YAML root must be a mapping/object")
+                    _save_yaml_file(config_path, loaded)
+                else:
+                    disk = _load_yaml_file(config_path)
+                    disk.setdefault("log", {})
+                    disk.setdefault("alerts", {})
+                    if not isinstance(disk["alerts"].get("pushover"), dict):
+                        disk["alerts"]["pushover"] = {}
+
+                    disk["log"]["directory"] = request.form.get("log_directory", "/logs").strip()
+                    disk["log"]["pattern"] = request.form.get("log_pattern", "zr_*.log").strip()
+                    disk["log"]["tail_from_end"] = request.form.get("tail_from_end") == "on"
+                    try:
+                        disk["log"]["poll_interval"] = float(request.form.get("poll_interval") or 2)
+                    except ValueError:
+                        disk["log"]["poll_interval"] = 2
+
+                    disk["allowlist_ips"] = _as_list(request.form.get("allowlist_ips", ""))
+                    disk["blocklist_ips"] = _as_list(request.form.get("blocklist_ips", ""))
+                    disk["sensitive_hosts"] = _as_list(request.form.get("sensitive_hosts", ""))
+                    disk["exploit_paths"] = _as_list(request.form.get("exploit_paths", ""))
+                    disk["bad_user_agents"] = _as_list(request.form.get("bad_user_agents", ""))
+
+                    enabled = request.form.getlist("known_lists")
+                    disk["known_lists"] = {"use_cache": True, "enabled": enabled}
+
+                    try:
+                        disk["lists_refresh_hours"] = float(request.form.get("lists_refresh_hours") or 24)
+                    except ValueError:
+                        disk["lists_refresh_hours"] = 24
+
+                    disk["alert_sensitive_success"] = request.form.get("alert_sensitive_success") == "on"
+
+                    a = disk["alerts"]
+                    a["min_severity"] = request.form.get("min_severity", "medium").strip()
+                    try:
+                        a["cooldown_seconds"] = int(request.form.get("cooldown_seconds") or 300)
+                    except ValueError:
+                        a["cooldown_seconds"] = 300
+                    a["stdout"] = request.form.get("stdout") == "on"
+                    a["discord_webhook"] = request.form.get("discord_webhook", "").strip()
+                    a["telegram_bot_token"] = request.form.get("telegram_bot_token", "").strip()
+                    a["telegram_chat_id"] = request.form.get("telegram_chat_id", "").strip()
+                    a["generic_webhook"] = request.form.get("generic_webhook", "").strip()
+
+                    po = a.setdefault("pushover", {})
+                    po["user_key"] = request.form.get("pushover_user_key", "").strip()
+                    po["api_token"] = request.form.get("pushover_api_token", "").strip()
+                    po["device"] = request.form.get("pushover_device", "").strip()
+                    po["sound"] = request.form.get("pushover_sound", "").strip()
+
+                    th = disk.setdefault("thresholds", {})
+                    for key in (
+                        "exploit_hits_for_alert",
+                        "exploit_window_seconds",
+                        "block_hits_for_alert",
+                        "block_window_seconds",
+                        "auth_fail_for_alert",
+                        "auth_fail_window_seconds",
+                    ):
+                        try:
+                            th[key] = int(request.form.get(key) or th.get(key) or 0)
+                        except ValueError:
+                            pass
+
+                    _save_yaml_file(config_path, disk)
+
+                rt.RUNTIME.request_reload()
+                flash("Gespeichert. Konfiguration wird neu geladen…", "ok")
+            except Exception as exc:
+                log.exception("Config save failed")
+                flash(f"Speichern fehlgeschlagen: {exc}", "error")
+            return redirect(url_for("config_page"))
+
+        try:
+            disk = _load_yaml_file(config_path)
+        except Exception as exc:
+            flash(f"Config lesen fehlgeschlagen: {exc}", "error")
+            disk = {}
+
+        runtime_cfg = apply_env_overrides(_public_cfg(dict(disk)))
+        enabled = []
+        kl = disk.get("known_lists") or {}
+        if isinstance(kl, list):
+            enabled = kl
+        elif isinstance(kl, dict):
+            enabled = kl.get("enabled") or []
+
+        yaml_text = yaml.safe_dump(_public_cfg(disk), sort_keys=False, allow_unicode=True)
+        return render_template(
+            "config.html",
+            cfg=disk,
+            runtime_cfg=runtime_cfg,
+            yaml_text=yaml_text,
+            catalog=KNOWN_LIST_CATALOG,
+            enabled=set(enabled),
+            as_text=_as_text,
+        )
+
+    @app.route("/actions/reload-lists", methods=["POST"])
+    @login_required
+    def action_reload_lists():
+        if rt.RUNTIME:
+            rt.RUNTIME.request_lists_reload()
+            flash("Threat-Listen werden neu geladen…", "ok")
+        return redirect(url_for("dashboard"))
+
+    @app.route("/actions/reload-config", methods=["POST"])
+    @login_required
+    def action_reload_config():
+        if rt.RUNTIME:
+            rt.RUNTIME.request_reload()
+            flash("Konfiguration wird neu geladen…", "ok")
+        return redirect(url_for("dashboard"))
+
+    @app.route("/actions/test-alert", methods=["POST"])
+    @login_required
+    def action_test_alert():
+        if not rt.RUNTIME or not rt.RUNTIME.alerter:
+            flash("Alerter nicht bereit.", "error")
+            return redirect(url_for("dashboard"))
+        alert = Alert(
+            severity="high",
+            title="Test-Alarm aus der Web-UI",
+            body="Wenn du das siehst, funktioniert die Alarmierung (Pushover/Discord/Telegram).",
+            fingerprint=f"ui-test:{time.time()}",
+        )
+        try:
+            if rt.RUNTIME.alerter.send(alert, time.time()):
+                rt.RUNTIME.note_alert(alert.severity, alert.title, alert.body)
+            flash("Test-Alarm gesendet (siehe Channels + Log).", "ok")
+        except Exception as exc:
+            flash(f"Test fehlgeschlagen: {exc}", "error")
+        return redirect(url_for("dashboard"))
+
+    @app.route("/lists")
+    @login_required
+    def lists_page():
+        snap = rt.RUNTIME.snapshot() if rt.RUNTIME else {}
+        lists_dir = "/data/lists"
+        if rt.RUNTIME and rt.RUNTIME.cfg:
+            lists_dir = rt.RUNTIME.cfg.get("lists_dir") or lists_dir
+        files = []
+        try:
+            p = Path(lists_dir)
+            if p.is_dir():
+                for f in sorted(p.iterdir()):
+                    if f.is_file():
+                        files.append({"name": f.name, "size": f.stat().st_size})
+        except OSError:
+            pass
+        return render_template(
+            "lists.html",
+            snap=snap,
+            files=files,
+            lists_dir=lists_dir,
+            catalog=KNOWN_LIST_CATALOG,
+        )
+
+    return app
+
+
+def start_web_server(config_path: str) -> Optional[threading.Thread]:
+    if os.environ.get("WEB_ENABLED", "true").lower() in ("0", "false", "no"):
+        log.info("Web UI disabled (WEB_ENABLED=false)")
+        return None
+
+    host = os.environ.get("WEB_HOST", "0.0.0.0")
+    port = int(os.environ.get("WEB_PORT", "8787"))
+    app = create_app(config_path)
+    server = make_server(host, port, app, threaded=True)
+
+    def _run():
+        log.info("Web UI listening on http://%s:%s", host, port)
+        server.serve_forever()
+
+    t = threading.Thread(target=_run, name="zoraxy-guard-web", daemon=True)
+    t.start()
+    return t
