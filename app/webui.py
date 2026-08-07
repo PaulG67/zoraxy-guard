@@ -34,6 +34,7 @@ from .catalog import (
     update_catalog_from_remote,
 )
 from . import catalog as catalog_mod
+from .backfill import HOURS_OPTIONS, start_history_backfill
 
 log = logging.getLogger("zoraxy-guard.web")
 
@@ -136,7 +137,31 @@ def create_app(config_path: str) -> Flask:
             geo=rt.RUNTIME.geo,
             threats=rt.RUNTIME.threats,
         )
-        return render_template("history.html", data=data, time=time)
+        with rt.RUNTIME.lock:
+            backfill = dict(rt.RUNTIME.backfill)
+        return render_template(
+            "history.html",
+            data=data,
+            time=time,
+            backfill=backfill,
+            backfill_hours=HOURS_OPTIONS,
+        )
+
+    @app.route("/history/backfill", methods=["POST"])
+    @login_required
+    def history_backfill():
+        if not rt.RUNTIME:
+            flash("Runtime nicht bereit.", "error")
+            return redirect(url_for("dashboard"))
+        try:
+            hours = int(request.form.get("hours") or 1)
+        except (TypeError, ValueError):
+            hours = 1
+        ok, msg = start_history_backfill(rt.RUNTIME, hours)
+        flash(msg, "ok" if ok else "error")
+        # Show same filter window as requested hours when convenient
+        w = {1: "1h", 6: "6h", 12: "12h", 24: "24h"}.get(hours, "1h")
+        return redirect(url_for("history_page", w=w))
 
     @app.route("/config", methods=["GET", "POST"])
     @login_required

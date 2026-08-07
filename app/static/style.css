@@ -370,3 +370,23 @@ section.block { margin-bottom: 18px; }
   margin-top: 6px;
 }
 .chip.st-5 { color: var(--crit); border-color: rgba(255,107,107,0.35); }
+
+.backfill-card { margin-bottom: 16px; }
+.backfill-form label { margin-top: 0; }
+.backfill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 4px;
+}
+.backfill-row select { width: auto; min-width: 200px; }
+.backfill-status.is-running { color: var(--accent); }
+.pulse {
+  animation: pulse 1.2s ease-in-out infinite;
+  margin-right: 4px;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}

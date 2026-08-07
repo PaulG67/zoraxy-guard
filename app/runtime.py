@@ -142,6 +142,21 @@ class Runtime:
     geo: GeoCache = field(default_factory=GeoCache)
     reload_requested: bool = False
     lists_reload_requested: bool = False
+    # On-demand disk → history memory (no alerts)
+    backfill: dict = field(
+        default_factory=lambda: {
+            "running": False,
+            "hours": 0,
+            "started_at": 0.0,
+            "finished_at": 0.0,
+            "files": 0,
+            "lines_read": 0,
+            "lines_loaded": 0,
+            "lines_skipped_old": 0,
+            "error": "",
+            "message": "",
+        }
+    )
 
     def request_reload(self) -> None:
         with self.lock:
@@ -178,6 +193,7 @@ class Runtime:
                 "recent_alerts": list(self.recent_alerts)[:50],
                 "config_path": self.config_path,
                 "history_buffer": self.history.buffer_info(),
+                "backfill": dict(self.backfill),
             }
 
 

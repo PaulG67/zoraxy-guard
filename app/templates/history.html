@@ -1,15 +1,59 @@
 {% extends "base.html" %}
 {% block title %}History · {{ app_name }}{% endblock %}
+{% block head %}
+{% if backfill.running %}
+  <meta http-equiv="refresh" content="3">
+{% endif %}
+{% endblock %}
 {% block content %}
 <section class="block">
   <h2 style="margin:0 0 6px;font-size:1.15rem;">Zugriffshistorie</h2>
   <p class="hint" style="margin-top:0;">
     Nur im Arbeitsspeicher (Ring-Buffer, max. {{ data.buffer.max }} Einträge · ~{{ data.buffer.retention_hours }}&nbsp;h).
-    Geo/ASN über Cache + ip-api (öffentliche IPs; LAN markiert privat). Derzeit {{ data.buffer.size }} Einträge im Puffer.
+    Live-Tail läuft weiter vorwärts; optional Disk-Nachladen unten. Keine Persistenz — Neustart = leer.
     {% if data.geo_stats and data.geo_stats.last_error %}
       <span class="err-text">Geo: {{ data.geo_stats.last_error }}</span>
     {% endif %}
   </p>
+</section>
+
+<section class="block">
+  <div class="card backfill-card">
+    <h3 style="margin:0 0 8px;font-size:0.95rem;">Disk-Logs nachladen (einmalig, kein Alert)</h3>
+    <p class="hint" style="margin-top:0;">
+      Liest passende <code class="mono">zr_*.log</code>-Dateien von Disk in den History-Ring.
+      Detektor/Alerter laufen nicht mit. Tail-Offsets bleiben unberührt (kein Dauer-Backlog).
+      Bei Start wird der Memory-Ring geleert und neu befüllt — erneut nachladen = neu scannen.
+      Live-Requests danach mischen sich wieder ein. Ring-Limit gilt weiterhin.
+    </p>
+    <form method="post" action="{{ url_for('history_backfill') }}" class="backfill-form">
+      <label for="bf_hours">Zeitraum zurück</label>
+      <div class="backfill-row">
+        <select name="hours" id="bf_hours" {% if backfill.running %}disabled{% endif %}>
+          {% for h in backfill_hours %}
+            <option value="{{ h }}" {% if backfill.hours == h or (not backfill.hours and h == 1) %}selected{% endif %}>
+              letzte {{ h }} Stunde{% if h > 1 %}n{% endif %}
+            </option>
+          {% endfor %}
+        </select>
+        <button type="submit" class="primary" {% if backfill.running %}disabled{% endif %}>
+          {% if backfill.running %}Lädt…{% else %}Von Disk laden{% endif %}
+        </button>
+      </div>
+    </form>
+    {% if backfill.message %}
+      <p class="hint backfill-status {% if backfill.running %}is-running{% endif %} {% if backfill.error %}err-text{% endif %}">
+        {% if backfill.running %}<span class="pulse">●</span>{% endif %}
+        {{ backfill.message }}
+        {% if backfill.lines_read and not backfill.running %}
+          · Buffer jetzt {{ data.buffer.size }}/{{ data.buffer.max }}
+        {% endif %}
+      </p>
+    {% endif %}
+    {% if backfill.running %}
+      <p class="hint">Seite aktualisiert sich alle 3 s, solange der Scan läuft.</p>
+    {% endif %}
+  </div>
 </section>
 
 <form class="card hist-filters" method="get" action="{{ url_for('history_page') }}">

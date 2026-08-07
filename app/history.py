@@ -139,6 +139,11 @@ class AccessHistory:
                 "retention_hours": 24,
             }
 
+    def clear(self) -> None:
+        """Drop all in-memory access events (e.g. before on-demand disk load)."""
+        with self._lock:
+            self._events.clear()
+
     def _prune_locked(self, cutoff: float) -> None:
         while self._events and self._events[0].ts < cutoff:
             self._events.popleft()
