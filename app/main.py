@@ -244,6 +244,7 @@ def run(config_path: str) -> None:
             for line in lines:
                 event = parse_line(line)
                 hist.record(event)
+                hist.mark_live_ingress()
                 if not det or not alt:
                     break
                 for alert in det.process(event):

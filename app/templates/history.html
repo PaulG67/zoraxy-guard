@@ -6,11 +6,14 @@
 {% endif %}
 {% endblock %}
 {% block content %}
+{% set mem = mem %}
+{% include 'partials/memory_state.html' %}
+
 <section class="block">
   <h2 style="margin:0 0 6px;font-size:1.15rem;">Zugriffshistorie</h2>
   <p class="hint" style="margin-top:0;">
-    Nur im Arbeitsspeicher (Ring-Buffer, max. {{ data.buffer.max }} Einträge · ~{{ data.buffer.retention_hours }}&nbsp;h).
-    Live-Tail läuft weiter vorwärts; optional Disk-Nachladen unten. Keine Persistenz — Neustart = leer.
+    Inhalt = gemeinsamer Memory-Ring (gleiche Zahlen wie Status-Tab).
+    Ansichtsfilter (Zeitfenster/Status/Risiko) verändern nur die Anzeige, nicht den Ring.
     {% if data.geo_stats and data.geo_stats.last_error %}
       <span class="err-text">Geo: {{ data.geo_stats.last_error }}</span>
     {% endif %}
@@ -45,7 +48,7 @@
         {% if backfill.running %}<span class="pulse">●</span>{% endif %}
         {{ backfill.message }}
         {% if backfill.lines_read and not backfill.running %}
-          · Buffer jetzt {{ data.buffer.size }}/{{ data.buffer.max }}
+          · Buffer jetzt {{ mem.memory.size if mem and mem.memory else data.buffer.size }}/{{ data.buffer.max }}
         {% endif %}
       </p>
     {% endif %}

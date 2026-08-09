@@ -145,11 +145,13 @@ def create_app(config_path: str) -> Flask:
             only_action=only_action,
             only_noise=only_noise,
         )
+        mem = rt.RUNTIME.memory_state()
         with rt.RUNTIME.lock:
             backfill = dict(rt.RUNTIME.backfill)
         return render_template(
             "history.html",
             data=data,
+            mem=mem,
             time=time,
             backfill=backfill,
             backfill_hours=HOURS_OPTIONS,

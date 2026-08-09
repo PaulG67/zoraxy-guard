@@ -103,6 +103,12 @@ class AccessHistory:
         self._lock = Lock()
         self.dropped_old = 0
         self.recorded = 0
+        # Memory session (shared by Status + History UI)
+        now = time.time()
+        self.session_generation = 1
+        self.session_started_at = now
+        self.session_recorded = 0
+        self.fill_mode = "live"  # live | backfill | backfill+live
 
     def set_max_events(self, max_events: int) -> None:
         max_events = max(1000, int(max_events))
@@ -137,8 +143,20 @@ class AccessHistory:
         with self._lock:
             self._events.append(ev)
             self.recorded += 1
+            self.session_recorded += 1
+            if self.fill_mode == "backfill":
+                # Further records after backfill session mark mixed feed
+                pass
             if self.recorded % 200 == 0:
                 self._prune_locked(time.time() - MAX_WINDOW_SEC)
+
+    def mark_live_ingress(self) -> None:
+        """Call when live tail records (not disk backfill)."""
+        with self._lock:
+            if self.fill_mode == "backfill":
+                self.fill_mode = "backfill+live"
+            elif self.fill_mode not in ("backfill+live", "live"):
+                self.fill_mode = "live"
 
     def buffer_info(self) -> dict[str, Any]:
         with self._lock:
@@ -148,16 +166,24 @@ class AccessHistory:
                 "size": len(self._events),
                 "max": self.max_events,
                 "recorded_total": self.recorded,
+                "session_recorded": self.session_recorded,
                 "pruned_old": self.dropped_old,
                 "retention_hours": 24,
                 "oldest_ts": oldest,
                 "newest_ts": newest,
+                "session_started_at": self.session_started_at,
+                "session_generation": self.session_generation,
+                "fill_mode": self.fill_mode,
             }
 
-    def clear(self) -> None:
-        """Drop all in-memory access events (e.g. before on-demand disk load)."""
+    def clear(self, fill_mode: str = "live") -> None:
+        """Drop all in-memory access events; start a new memory session."""
         with self._lock:
             self._events.clear()
+            self.session_generation += 1
+            self.session_started_at = time.time()
+            self.session_recorded = 0
+            self.fill_mode = fill_mode if fill_mode in ("live", "backfill") else "live"
 
     def _prune_locked(self, cutoff: float) -> None:
         while self._events and self._events[0].ts < cutoff:
@@ -201,11 +227,7 @@ class AccessHistory:
         with self._lock:
             self._prune_locked(now - MAX_WINDOW_SEC)
             events = [e for e in self._events if e.ts >= cutoff]
-            buf_len = len(self._events)
-            rec = self.recorded
-            dropped = self.dropped_old
-            max_ev = self.max_events
-
+        buf = self.buffer_info()
         total_before_status = len(events)
 
         if qn:
@@ -418,11 +440,5 @@ class AccessHistory:
                 "samples": blocked_samples,
             },
             "geo_stats": geo.stats() if geo else {},
-            "buffer": {
-                "size": buf_len,
-                "max": max_ev,
-                "recorded_total": rec,
-                "pruned_old": dropped,
-                "retention_hours": 24,
-            },
+            "buffer": buf,
         }

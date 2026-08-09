@@ -1,0 +1,61 @@
+{# Shared memory banner — same Runtime.memory_state() on Status & History #}
+{% set up = mem.process.uptime_sec or 0 if mem and mem.process else 0 %}
+{% set up_h = (up // 3600) %}
+{% set up_m = ((up % 3600) // 60) %}
+{% set up_s = (up % 60) %}
+{% set m = mem.memory if mem else {} %}
+{% set p = mem.process if mem else {} %}
+
+<div class="card analysis-banner analysis-{{ mem.analysis_state or 'waiting' }} memory-unified">
+  <div class="analysis-banner-main">
+    <div class="stat-label">Gemeinsamer Memory-Stand · Status &amp; History</div>
+    <div class="stat-value" style="font-size:1.1rem;">{{ mem.analysis_label or '—' }}</div>
+    <p class="hint" style="margin:6px 0 0;">{{ m.note or '' }}</p>
+  </div>
+  <div class="analysis-banner-meta">
+    <div>
+      <div class="stat-label">Prozess / Detektor seit</div>
+      <div class="mono">
+        {% if p.started_at %}
+          {{ time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(p.started_at)) }}
+        {% else %}—{% endif %}
+      </div>
+      <div class="hint">Uptime {{ up_h }}h {{ up_m }}m {{ up_s }}s · {{ p.lines_processed or 0 }} Log-Zeilen gelesen</div>
+    </div>
+    <div>
+      <div class="stat-label">Memory-Session seit</div>
+      <div class="mono">
+        {% if m.session_started_at %}
+          {{ time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(m.session_started_at)) }}
+        {% else %}—{% endif %}
+      </div>
+      <div class="hint">
+        #{{ m.session_generation or 1 }} · {{ m.fill_label or m.fill_mode or '—' }}
+        {% if m.session_recorded %} · {{ m.session_recorded }} in Session{% endif %}
+      </div>
+    </div>
+    <div>
+      <div class="stat-label">Ring (History-Daten)</div>
+      <div class="mono">{{ m.size or 0 }} / {{ m.max or '—' }}</div>
+      {% if m.oldest_ts and m.newest_ts and m.size %}
+        <div class="hint">
+          Inhalt {{ time.strftime('%Y-%m-%d %H:%M', time.localtime(m.oldest_ts)) }}
+          – {{ time.strftime('%H:%M:%S', time.localtime(m.newest_ts)) }}
+        </div>
+      {% else %}
+        <div class="hint">leer — Live-Tail und/oder Reset &amp; laden</div>
+      {% endif %}
+    </div>
+    <div>
+      <div class="stat-label">Letzte Log-Zeile (Tail)</div>
+      <div class="mono">
+        {% if p.last_line_at %}
+          {{ time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(p.last_line_at)) }}
+        {% else %}noch keine{% endif %}
+      </div>
+      {% if p.last_line_at and mem.now %}
+        <div class="hint">vor {{ ((mem.now - p.last_line_at)|int) }}s</div>
+      {% endif %}
+    </div>
+  </div>
+</div>

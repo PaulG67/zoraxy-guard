@@ -189,50 +189,105 @@ class Runtime:
             self.alerts_sent += 1
             self.recent_alerts.appendleft(record)
 
+    def memory_state(self) -> dict[str, Any]:
+        """
+        Single source of truth for Memory (History ring) + process analysis clocks.
+        Used by Status and History tabs so both show the same numbers.
+        """
+        with self.lock:
+            now = time.time()
+            hb = self.history.buffer_info()
+            backfill = dict(self.backfill)
+            started = self.started_at
+            last_line = self.last_line_at or 0.0
+            lines = self.lines_processed
+            alerts_sent = self.alerts_sent
+            watching = self.watching
+            try:
+                min_sev = str((self.cfg or {}).get("alerts", {}) or {}).get("min_severity") or "medium"
+            except Exception:
+                min_sev = "medium"
+
+        age_line = (now - last_line) if last_line else None
+        if last_line and age_line is not None and age_line < 120:
+            analysis_state = "live"
+            analysis_label = "Live — Logs werden gelesen"
+        elif last_line and age_line is not None and age_line < 900:
+            analysis_state = "quiet"
+            analysis_label = "Ruhig — keine neuen Zeilen seit ein paar Minuten"
+        elif last_line:
+            analysis_state = "stale"
+            analysis_label = "Stille — lange keine neuen Log-Zeilen"
+        elif lines == 0:
+            analysis_state = "waiting"
+            analysis_label = "Wartend — noch keine Log-Zeilen in dieser Laufzeit"
+        else:
+            analysis_state = "idle"
+            analysis_label = "Kein aktueller Traffic"
+
+        fill = hb.get("fill_mode") or "live"
+        fill_label = {
+            "live": "Live-Tail (nur neue Logs seit Session)",
+            "backfill": "Disk-Nachladen",
+            "backfill+live": "Disk-Nachladen + Live-Tail",
+        }.get(fill, fill)
+
+        size = int(hb.get("size") or 0)
+        if size == 0:
+            mem_label = "Memory-Ring leer (gleiche Quelle für Status & History)"
+        else:
+            mem_label = f"{size} Requests im gemeinsamen Memory-Ring"
+
+        return {
+            "now": now,
+            "analysis_state": analysis_state,
+            "analysis_label": analysis_label,
+            "process": {
+                "started_at": started,
+                "uptime_sec": max(0, int(now - started)),
+                "lines_processed": lines,
+                "last_line_at": last_line,
+                "alerts_sent": alerts_sent,
+                "min_severity": min_sev,
+                "watching": watching,
+            },
+            "memory": {
+                "size": size,
+                "max": hb.get("max"),
+                "oldest_ts": hb.get("oldest_ts") or 0,
+                "newest_ts": hb.get("newest_ts") or 0,
+                "session_started_at": hb.get("session_started_at") or started,
+                "session_generation": hb.get("session_generation") or 1,
+                "session_recorded": hb.get("session_recorded") or 0,
+                "recorded_total": hb.get("recorded_total") or 0,
+                "retention_hours": hb.get("retention_hours") or 24,
+                "fill_mode": fill,
+                "fill_label": fill_label,
+                "label": mem_label,
+                "shared": True,
+                "note": (
+                    "Status und History nutzen denselben Access-History-Ring im RAM. "
+                    "Alarme sind eine separate Liste (nur bei Severity-Schwelle)."
+                ),
+            },
+            "backfill": backfill,
+        }
+
     def snapshot(self) -> dict[str, Any]:
+        mem = self.memory_state()
         with self.lock:
             sources = {}
             net_count = 0
             if self.threats:
                 sources = dict(self.threats.sources)
                 net_count = len(self.threats.block_nets)
-            now = time.time()
-            hb = self.history.buffer_info()
-            last_line = self.last_line_at or 0.0
-            if last_line:
-                age_line = now - last_line
-            else:
-                age_line = None
-            # Live if saw lines recently; idle if started but never; stale if long silence
-            if last_line and age_line is not None and age_line < 120:
-                analysis_state = "live"
-                analysis_label = "Live — Logs werden gelesen"
-            elif last_line and age_line is not None and age_line < 900:
-                analysis_state = "quiet"
-                analysis_label = "Ruhig — keine neuen Zeilen seit ein paar Minuten"
-            elif last_line:
-                analysis_state = "stale"
-                analysis_label = "Stille — lange keine neuen Log-Zeilen"
-            elif self.lines_processed == 0:
-                analysis_state = "waiting"
-                analysis_label = "Wartend — noch keine Log-Zeilen in dieser Laufzeit"
-            else:
-                analysis_state = "idle"
-                analysis_label = "Kein aktueller Traffic"
-
-            min_sev = ""
-            try:
-                min_sev = str((self.cfg or {}).get("alerts", {}) or {}).get("min_severity") or "medium"
-            except Exception:
-                min_sev = "medium"
-
             return {
-                "now": now,
-                "started_at": self.started_at,
-                "uptime_sec": max(0, int(now - self.started_at)),
-                "lines_processed": self.lines_processed,
-                "alerts_sent": self.alerts_sent,
-                "last_line_at": self.last_line_at,
+                **mem,
+                "started_at": mem["process"]["started_at"],
+                "uptime_sec": mem["process"]["uptime_sec"],
+                "lines_processed": mem["process"]["lines_processed"],
+                "alerts_sent": mem["process"]["alerts_sent"],
+                "last_line_at": mem["process"]["last_line_at"],
                 "last_reload_at": self.last_reload_at,
                 "last_error": self.last_error,
                 "watching": self.watching,
@@ -241,11 +296,8 @@ class Runtime:
                 "threat_networks": net_count,
                 "recent_alerts": list(self.recent_alerts)[:50],
                 "config_path": self.config_path,
-                "history_buffer": hb,
-                "backfill": dict(self.backfill),
-                "analysis_state": analysis_state,
-                "analysis_label": analysis_label,
-                "min_severity": min_sev,
+                "history_buffer": self.history.buffer_info(),
+                "min_severity": mem["process"]["min_severity"],
             }
 
 

@@ -71,7 +71,7 @@ def _run_backfill(runtime: "Runtime", hours: int) -> None:
 
         files = list_log_files(directory, pattern)
         # Clear ring so one explicit load = memory snapshot of this window (+ later live)
-        history.clear()
+        history.clear(fill_mode="backfill")
 
         with runtime.lock:
             runtime.backfill["files"] = len(files)
