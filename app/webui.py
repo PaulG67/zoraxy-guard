@@ -130,12 +130,16 @@ def create_app(config_path: str) -> Flask:
         if view not in ("app", "ip"):
             view = "app"
         q = (request.args.get("q") or "").strip()
+        only_success = request.args.get("ok") in ("1", "on", "true", "yes")
+        only_failed = request.args.get("fail") in ("1", "on", "true", "yes")
         data = rt.RUNTIME.history.snapshot(
             window=window,
             view=view,
             q=q,
             geo=rt.RUNTIME.geo,
             threats=rt.RUNTIME.threats,
+            only_success=only_success,
+            only_failed=only_failed,
         )
         with rt.RUNTIME.lock:
             backfill = dict(rt.RUNTIME.backfill)
@@ -160,6 +164,30 @@ def create_app(config_path: str) -> Flask:
         ok, msg = start_history_backfill(rt.RUNTIME, hours)
         flash(msg, "ok" if ok else "error")
         # Show same filter window as requested hours when convenient
+        w = {1: "1h", 6: "6h", 12: "12h", 24: "24h"}.get(hours, "1h")
+        args = {"w": w}
+        if request.form.get("ok") in ("1", "on"):
+            args["ok"] = "1"
+        if request.form.get("fail") in ("1", "on"):
+            args["fail"] = "1"
+        return redirect(url_for("history_page", **args))
+
+    @app.route("/history/reset-load", methods=["POST"])
+    @login_required
+    def history_reset_load():
+        """Clear memory ring and start a fresh disk backfill (no alerts)."""
+        if not rt.RUNTIME:
+            flash("Runtime nicht bereit.", "error")
+            return redirect(url_for("dashboard"))
+        try:
+            hours = int(request.form.get("hours") or 1)
+        except (TypeError, ValueError):
+            hours = 1
+        # start_history_backfill already clears the ring first
+        ok, msg = start_history_backfill(rt.RUNTIME, hours)
+        if ok:
+            msg = f"Reset + Nachladen: {msg}"
+        flash(msg, "ok" if ok else "error")
         w = {1: "1h", 6: "6h", 12: "12h", 24: "24h"}.get(hours, "1h")
         return redirect(url_for("history_page", w=w))
 

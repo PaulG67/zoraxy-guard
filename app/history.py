@@ -63,6 +63,16 @@ def is_blocked(event: AccessEvent) -> bool:
     return False
 
 
+def is_success(event: AccessEvent) -> bool:
+    """HTTP 2xx/3xx — Antwort „erfolgreich“ (u. a. 200)."""
+    return 200 <= int(event.status or 0) < 400
+
+
+def is_failed(event: AccessEvent) -> bool:
+    """Nicht erfolgreich: 1xx, 4xx, 5xx, 0."""
+    return not is_success(event)
+
+
 def block_reasons(event: AccessEvent, threat_list: Optional[str] = None) -> list[str]:
     reasons: list[str] = []
     router = (event.router or "").lower()
@@ -167,11 +177,17 @@ class AccessHistory:
         geo: Optional["GeoCache"] = None,
         threats: Optional["ThreatLists"] = None,
         blocked_sample_limit: int = 40,
+        only_success: bool = False,
+        only_failed: bool = False,
     ) -> dict[str, Any]:
         sec = WINDOWS.get(window, 3600)
         now = time.time()
         cutoff = now - sec
         qn = q.strip().lower()
+
+        # Mutual exclusivity: if both, prefer success (UI usually sends one)
+        if only_success and only_failed:
+            only_failed = False
 
         with self._lock:
             self._prune_locked(now - MAX_WINDOW_SEC)
@@ -180,6 +196,8 @@ class AccessHistory:
             rec = self.recorded
             dropped = self.dropped_old
             max_ev = self.max_events
+
+        total_before_status = len(events)
 
         if qn:
             events = [
@@ -190,6 +208,11 @@ class AccessHistory:
                 or qn in e.path.lower()
                 or qn in (e.router or "").lower()
             ]
+
+        if only_success:
+            events = [e for e in events if is_success(e)]
+        elif only_failed:
+            events = [e for e in events if is_failed(e)]
 
         # Geo for all client IPs in window (cached; few API misses)
         clients = {e.client for e in events}
@@ -279,7 +302,7 @@ class AccessHistory:
                 }
             )
 
-        # --- Blocked statistics ---
+        # --- Blocked statistics (after status filter when applicable) ---
         blocked_events = [e for e in events if is_blocked(e)]
         block_by_country: DefaultDict[str, int] = defaultdict(int)
         block_by_org: DefaultDict[str, int] = defaultdict(int)
@@ -325,8 +348,11 @@ class AccessHistory:
             "window_sec": sec,
             "view": view,
             "query": q,
+            "only_success": only_success,
+            "only_failed": only_failed,
             "now": now,
             "total_in_window": len(events),
+            "total_before_status_filter": total_before_status,
             "unique_ips": len(unique_ips),
             "unique_apps": len(unique_apps),
             "groups": out_groups,

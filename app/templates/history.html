@@ -19,14 +19,13 @@
 
 <section class="block">
   <div class="card backfill-card">
-    <h3 style="margin:0 0 8px;font-size:0.95rem;">Disk-Logs nachladen (einmalig, kein Alert)</h3>
+    <h3 style="margin:0 0 8px;font-size:0.95rem;">Memory zurücksetzen &amp; von Disk laden</h3>
     <p class="hint" style="margin-top:0;">
-      Liest passende <code class="mono">zr_*.log</code>-Dateien von Disk in den History-Ring.
-      Detektor/Alerter laufen nicht mit. Tail-Offsets bleiben unberührt (kein Dauer-Backlog).
-      Bei Start wird der Memory-Ring geleert und neu befüllt — erneut nachladen = neu scannen.
-      Live-Requests danach mischen sich wieder ein. Ring-Limit gilt weiterhin.
+      Leert den History-Ring und liest <code class="mono">zr_*.log</code> für den gewählten Zeitraum neu ein.
+      Keine Alerts · Tail-Offsets unberührt · max. 24 h · Ring-Limit gilt weiter.
     </p>
-    <form method="post" action="{{ url_for('history_backfill') }}" class="backfill-form">
+    <form method="post" action="{{ url_for('history_reset_load') }}" class="backfill-form"
+          onsubmit="return confirm('Memory leeren und Logs von Disk neu laden?');">
       <label for="bf_hours">Zeitraum zurück</label>
       <div class="backfill-row">
         <select name="hours" id="bf_hours" {% if backfill.running %}disabled{% endif %}>
@@ -37,7 +36,7 @@
           {% endfor %}
         </select>
         <button type="submit" class="primary" {% if backfill.running %}disabled{% endif %}>
-          {% if backfill.running %}Lädt…{% else %}Von Disk laden{% endif %}
+          {% if backfill.running %}Reset &amp; Laden läuft…{% else %}Reset &amp; laden{% endif %}
         </button>
       </div>
     </form>
@@ -56,7 +55,7 @@
   </div>
 </section>
 
-<form class="card hist-filters" method="get" action="{{ url_for('history_page') }}">
+<form class="card hist-filters" method="get" action="{{ url_for('history_page') }}" id="hist-filter-form">
   <div class="hist-filter-row">
     <div>
       <label for="w">Zeitfenster</label>
@@ -82,11 +81,33 @@
       <button type="submit" class="primary">Anzeigen</button>
     </div>
   </div>
+  <div class="hist-status-filters">
+    <label class="hist-check">
+      <input type="checkbox" name="ok" value="1" id="flt_ok"
+             {% if data.only_success %}checked{% endif %}
+             onchange="histExclusive(this, 'flt_fail'); this.form.submit();">
+      <span>Nur erfolgreiche (HTTP 2xx/3xx, z. B. 200)</span>
+    </label>
+    <label class="hist-check">
+      <input type="checkbox" name="fail" value="1" id="flt_fail"
+             {% if data.only_failed %}checked{% endif %}
+             onchange="histExclusive(this, 'flt_ok'); this.form.submit();">
+      <span>Nur nicht erfolgreich (4xx/5xx, …)</span>
+    </label>
+  </div>
 </form>
+<script>
+function histExclusive(el, otherId) {
+  if (el.checked) {
+    var o = document.getElementById(otherId);
+    if (o) o.checked = false;
+  }
+}
+</script>
 
 <div class="grid stats">
   <div class="card">
-    <div class="stat-label">Requests im Fenster</div>
+    <div class="stat-label">Requests {% if data.only_success %}(erfolgreich){% elif data.only_failed %}(fehlgeschlagen){% else %}im Fenster{% endif %}</div>
     <div class="stat-value">{{ data.total_in_window }}</div>
   </div>
   <div class="card">
@@ -226,7 +247,9 @@
   <div class="card">
     <p class="muted" style="margin:0;">
       Keine Zugriffe im gewählten Fenster
-      {% if data.query %}(Filter «{{ data.query }}»){% endif %}.
+      {% if data.query %}(Text «{{ data.query }}»){% endif %}
+      {% if data.only_success %}· nur 2xx/3xx{% endif %}
+      {% if data.only_failed %}· nur Fehler-Status{% endif %}.
     </p>
   </div>
 {% else %}

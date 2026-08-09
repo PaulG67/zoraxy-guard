@@ -371,7 +371,27 @@ section.block { margin-bottom: 18px; }
 }
 .chip.st-5 { color: var(--crit); border-color: rgba(255,107,107,0.35); }
 
-.backfill-card { margin-bottom: 16px; }
+.hist-status-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 22px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.hist-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--text);
+  cursor: pointer;
+}
+.hist-check input {
+  width: auto;
+  accent-color: var(--accent);
+}
 .backfill-form label { margin-top: 0; }
 .backfill-row {
   display: flex;
