@@ -2,18 +2,29 @@
 {% block title %}History · {{ app_name }}{% endblock %}
 {% block head %}
 {% if backfill.running %}
-  <meta http-equiv="refresh" content="3">
+  {# Kein full meta-refresh mehr: Soft-Poll erhält Filter/Anzeige, Memory unangetastet #}
 {% endif %}
 {% endblock %}
 {% block content %}
 {% set mem = mem %}
 {% include 'partials/memory_state.html' %}
 
+<div class="soft-refresh-bar card" style="margin-bottom:14px;">
+  <div class="soft-refresh-row">
+    <button type="button" class="primary" id="btn-soft-refresh">Memory-Stand aktualisieren</button>
+    <label class="hist-check" style="margin:0;">
+      <input type="checkbox" id="auto-soft-refresh" {% if backfill.running %}checked{% endif %}>
+      <span>Auto alle 5 s (Banner)</span>
+    </label>
+    <span class="hint" id="soft-refresh-stamp">Filter/Listen bleiben — Ring wird nicht geleert</span>
+  </div>
+</div>
+
 <section class="block">
   <h2 style="margin:0 0 6px;font-size:1.15rem;">Zugriffshistorie</h2>
   <p class="hint" style="margin-top:0;">
-    Inhalt = gemeinsamer Memory-Ring (gleiche Zahlen wie Status-Tab).
-    Ansichtsfilter (Zeitfenster/Status/Risiko) verändern nur die Anzeige, nicht den Ring.
+    Ansichtsfilter (Zeitfenster, Checkboxen) lesen den Memory-Ring nur und verändern Status/Memory nicht.
+    Schreibend: nur «Reset &amp; laden» unten.
     {% if data.geo_stats and data.geo_stats.last_error %}
       <span class="err-text">Geo: {{ data.geo_stats.last_error }}</span>
     {% endif %}
@@ -53,7 +64,7 @@
       </p>
     {% endif %}
     {% if backfill.running %}
-      <p class="hint">Seite aktualisiert sich alle 3 s, solange der Scan läuft.</p>
+      <p class="hint" id="backfill-live-hint">Nachladen läuft — Banner aktualisiert per Soft-Poll (kein Full-Reload, Filter bleiben).</p>
     {% endif %}
   </div>
 </section>
@@ -385,4 +396,49 @@ function histExclusive(el, otherId) {
   </div>
 {% endif %}
 </section>
+
+<script src="{{ url_for('static', filename='status_live.js') }}"></script>
+<script>
+(function () {
+  var url = {{ (api_status_url or url_for('api_status'))|tojson }};
+  var timer = null;
+  function tick() {
+    if (!window.zoraxyGuardSoftRefresh) return;
+    window.zoraxyGuardSoftRefresh({ statusUrl: url, fullStatus: false, alerts: false }).then(function (snap) {
+      if (!snap || !snap.backfill) return;
+      var b = snap.backfill;
+      var msg = document.querySelector(".backfill-status");
+      if (msg && b.message) {
+        msg.textContent = (b.running ? "● " : "") + b.message;
+        msg.className = "hint backfill-status" +
+          (b.running ? " is-running" : "") +
+          (b.error ? " err-text" : "");
+      }
+      var btn = document.querySelector(".backfill-form button[type=submit]");
+      var sel = document.getElementById("bf_hours");
+      if (btn) {
+        btn.disabled = !!b.running;
+        btn.textContent = b.running ? "Reset & Laden läuft…" : "Reset & laden";
+      }
+      if (sel) sel.disabled = !!b.running;
+      // After backfill finishes, one full reload of list once so rows match ring
+      if (!b.running && window.__bfWasRunning) {
+        window.__bfWasRunning = false;
+        window.location.reload();
+      }
+      if (b.running) window.__bfWasRunning = true;
+    });
+  }
+  var btn = document.getElementById("btn-soft-refresh");
+  if (btn) btn.addEventListener("click", tick);
+  var auto = document.getElementById("auto-soft-refresh");
+  function syncAuto() {
+    if (timer) { clearInterval(timer); timer = null; }
+    if (auto && auto.checked) timer = setInterval(tick, 5000);
+  }
+  if (auto) auto.addEventListener("change", syncAuto);
+  syncAuto();
+  {% if backfill.running %}window.__bfWasRunning = true;{% endif %}
+})();
+</script>
 {% endblock %}

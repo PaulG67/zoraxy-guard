@@ -446,6 +446,14 @@ section.block { margin-bottom: 18px; }
 }
 .status-meta-table { margin-top: 4px; }
 .analysis-banner .is-running { color: var(--accent); }
+
+.soft-refresh-bar { margin-bottom: 14px; padding: 12px 14px; }
+.soft-refresh-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  align-items: center;
+}
 .backfill-form label { margin-top: 0; }
 .backfill-row {
   display: flex;

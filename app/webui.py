@@ -13,6 +13,7 @@ import yaml
 from flask import (
     Flask,
     flash,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -117,6 +118,14 @@ def create_app(config_path: str) -> Flask:
         snap = rt.RUNTIME.snapshot() if rt.RUNTIME else {}
         return render_template("dashboard.html", snap=snap, time=time)
 
+    @app.route("/api/status")
+    @login_required
+    def api_status():
+        """Read-only status/memory snapshot. Never mutates history ring."""
+        if not rt.RUNTIME:
+            return jsonify({"error": "runtime not ready"}), 503
+        return jsonify(rt.RUNTIME.snapshot())
+
     @app.route("/history")
     @login_required
     def history_page():
@@ -134,6 +143,7 @@ def create_app(config_path: str) -> Flask:
         only_failed = request.args.get("fail") in ("1", "on", "true", "yes")
         only_action = request.args.get("action") in ("1", "on", "true", "yes")
         only_noise = request.args.get("noise") in ("1", "on", "true", "yes")
+        # Pure read path: snapshot/filter/view only — does not clear or reset memory.
         data = rt.RUNTIME.history.snapshot(
             window=window,
             view=view,
@@ -155,6 +165,7 @@ def create_app(config_path: str) -> Flask:
             time=time,
             backfill=backfill,
             backfill_hours=HOURS_OPTIONS,
+            api_status_url=url_for("api_status"),
         )
 
     @app.route("/history/backfill", methods=["POST"])

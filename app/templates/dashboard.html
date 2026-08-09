@@ -5,6 +5,21 @@
 {% set mem = snap %}
 {% include 'partials/memory_state.html' %}
 
+<div class="soft-refresh-bar card">
+  <div class="soft-refresh-row">
+    <button type="button" class="primary" id="btn-soft-refresh">Status aktualisieren</button>
+    <label class="hist-check" style="margin:0;">
+      <input type="checkbox" id="auto-soft-refresh" checked>
+      <span>Auto alle 10 s</span>
+    </label>
+    <span class="hint" id="soft-refresh-stamp">Nur Anzeige — Memory-Ring bleibt auf dem Server (kein Verlust)</span>
+  </div>
+  <p class="hint" style="margin:8px 0 0;">
+    Browser-Reload und dieser Button leeren den Memory-Ring <strong>nicht</strong>.
+    Leeren nur über History → «Reset &amp; laden». History-Filter ändern den Stand ebenfalls nicht.
+  </p>
+</div>
+
 {% set up = snap.uptime_sec or 0 %}
 {% set up_h = (up // 3600) %}
 {% set up_m = ((up % 3600) // 60) %}
@@ -13,22 +28,22 @@
 <div class="grid stats">
   <div class="card">
     <div class="stat-label">Zeilen verarbeitet</div>
-    <div class="stat-value">{{ snap.lines_processed or 0 }}</div>
+    <div class="stat-value" id="stat-lines">{{ snap.lines_processed or 0 }}</div>
     <div class="hint">Detektor seit Prozess-Start</div>
   </div>
   <div class="card">
     <div class="stat-label">Alarme gesendet</div>
-    <div class="stat-value">{{ snap.alerts_sent or 0 }}</div>
-    <div class="hint">Min. Severity: {{ snap.min_severity or 'medium' }}</div>
+    <div class="stat-value" id="stat-alerts">{{ snap.alerts_sent or 0 }}</div>
+    <div class="hint" id="stat-min-sev">Min. Severity: {{ snap.min_severity or 'medium' }}</div>
   </div>
   <div class="card">
     <div class="stat-label">Memory-Ring</div>
-    <div class="stat-value">{{ (snap.memory.size if snap.memory else hb.size) or 0 }}</div>
+    <div class="stat-value" id="stat-memory">{{ (snap.memory.size if snap.memory else hb.size) or 0 }}</div>
     <div class="hint">= History-Inhalt</div>
   </div>
   <div class="card">
     <div class="stat-label">Threat-Networks</div>
-    <div class="stat-value">{{ snap.threat_networks or 0 }}</div>
+    <div class="stat-value" id="stat-threats">{{ snap.threat_networks or 0 }}</div>
   </div>
 </div>
 
@@ -38,14 +53,14 @@
     <tbody>
       <tr>
         <th>Detektor-Analyse ab</th>
-        <td class="mono">
+        <td class="mono" id="meta-detector-started">
           {% if snap.started_at %}{{ time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(snap.started_at)) }}{% else %}—{% endif %}
           <span class="muted"> ({{ up_h }}h {{ up_m }}m uptime)</span>
         </td>
       </tr>
       <tr>
         <th>Memory-Session ab</th>
-        <td class="mono">
+        <td class="mono" id="meta-memory-session">
           {% if snap.memory and snap.memory.session_started_at %}
             {{ time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(snap.memory.session_started_at)) }}
           {% else %}—{% endif %}
@@ -54,13 +69,13 @@
       </tr>
       <tr>
         <th>Letzter Config-/Listen-Reload</th>
-        <td class="mono">
+        <td class="mono" id="meta-reload">
           {% if snap.last_reload_at %}{{ time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(snap.last_reload_at)) }}{% else %}—{% endif %}
         </td>
       </tr>
       <tr>
         <th>Logs</th>
-        <td><code>{{ snap.watching or '—' }}</code></td>
+        <td><code id="meta-watching">{{ snap.watching or '—' }}</code></td>
       </tr>
       <tr>
         <th>Config</th>
@@ -74,28 +89,22 @@
       {% endif %}
       <tr>
         <th>History gesamt erfasst (Lebensdauer)</th>
-        <td>{{ hb.recorded_total or 0 }} Requests (Ring max. {{ hb.max or '—' }})</td>
+        <td id="meta-recorded-total">{{ hb.recorded_total or 0 }} Requests (Ring max. {{ hb.max or '—' }})</td>
       </tr>
-      {% if snap.backfill and (snap.backfill.message or snap.backfill.running) %}
-      <tr>
+      <tr id="meta-backfill-row" style="{% if not (snap.backfill and (snap.backfill.message or snap.backfill.running)) %}display:none{% endif %}">
         <th>Disk-Nachladen</th>
-        <td class="{% if snap.backfill.running %}is-running{% endif %}{% if snap.backfill.error %} err-text{% endif %}">
-          {{ snap.backfill.message or '—' }}
-          {% if snap.backfill.finished_at %}
-            <span class="muted mono"> · {{ time.strftime('%H:%M:%S', time.localtime(snap.backfill.finished_at)) }}</span>
-          {% endif %}
+        <td id="meta-backfill" class="{% if snap.backfill and snap.backfill.running %}is-running{% endif %}{% if snap.backfill and snap.backfill.error %} err-text{% endif %}">
+          {{ (snap.backfill.message if snap.backfill else '') or '—' }}
         </td>
       </tr>
-      {% endif %}
     </tbody>
   </table>
-  {% if snap.last_error %}
-    <p class="flash error">Letzter Fehler: {{ snap.last_error }}</p>
-  {% endif %}
+  <p class="flash error" id="meta-last-error" style="{% if not snap.last_error %}display:none{% endif %}">
+    {% if snap.last_error %}Letzter Fehler: {{ snap.last_error }}{% endif %}
+  </p>
   <p class="hint" style="margin-bottom:0;">
-    <strong>Vereinheitlicht:</strong> Die Zahlen im Memory-Banner oben sind identisch mit dem History-Tab.
-    Zugriffsdetails und Filter → <a href="{{ url_for('history_page') }}">History</a>.
-    Alarme unten sind unabhängig (nur ausgelöste Meldungen ab Severity «{{ snap.min_severity or 'medium' }}»).
+    Soft-Refresh und History-Arbeit greifen den Memory-Ring nur lesend.
+    Schreibend nur «Reset &amp; laden» auf dem History-Tab.
   </p>
 </div>
 
@@ -130,6 +139,7 @@
 
 <div class="card" style="margin-top:14px">
   <h2>Letzte Alarme</h2>
+  <div id="alerts-live">
   {% if snap.recent_alerts %}
   <div class="alert-list">
     {% for a in snap.recent_alerts %}
@@ -165,13 +175,31 @@
   {% else %}
   <p class="muted" style="margin-bottom:6px;">Noch keine Alarme in dieser Laufzeit.</p>
   <p class="hint" style="margin:0;">
-    Memory/History werden trotzdem befüllt (siehe Banner). Seit Detektor-Start
-    {% if snap.started_at %}<strong class="mono">{{ time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(snap.started_at)) }}</strong>{% endif %}
-    : <strong>{{ snap.lines_processed or 0 }}</strong> Log-Zeilen,
-    Memory: <strong>{{ (snap.memory.size if snap.memory else 0) or 0 }}</strong> Requests.
-    Kein Alarm = keine Treffer ≥ «{{ snap.min_severity or 'medium' }}».
+    Memory/History werden trotzdem befüllt. Soft-Refresh aktualisiert nur die Anzeige.
   </p>
   {% endif %}
+  </div>
 </div>
 
+<script src="{{ url_for('static', filename='status_live.js') }}"></script>
+<script>
+(function () {
+  var url = {{ url_for('api_status')|tojson }};
+  var timer = null;
+  function tick() {
+    if (window.zoraxyGuardSoftRefresh) {
+      window.zoraxyGuardSoftRefresh({ statusUrl: url, fullStatus: true, alerts: true });
+    }
+  }
+  var btn = document.getElementById("btn-soft-refresh");
+  if (btn) btn.addEventListener("click", tick);
+  var auto = document.getElementById("auto-soft-refresh");
+  function syncAuto() {
+    if (timer) { clearInterval(timer); timer = null; }
+    if (auto && auto.checked) timer = setInterval(tick, 10000);
+  }
+  if (auto) auto.addEventListener("change", syncAuto);
+  syncAuto();
+})();
+</script>
 {% endblock %}

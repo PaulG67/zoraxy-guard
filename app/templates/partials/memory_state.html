@@ -1,4 +1,5 @@
-{# Shared memory banner — same Runtime.memory_state() on Status & History #}
+{# Shared memory banner — same Runtime.memory_state() on Status & History.
+   IDs support soft refresh via /api/status without full page reload. #}
 {% set up = mem.process.uptime_sec or 0 if mem and mem.process else 0 %}
 {% set up_h = (up // 3600) %}
 {% set up_m = ((up % 3600) // 60) %}
@@ -6,56 +7,58 @@
 {% set m = mem.memory if mem else {} %}
 {% set p = mem.process if mem else {} %}
 
-<div class="card analysis-banner analysis-{{ mem.analysis_state or 'waiting' }} memory-unified">
+<div class="card analysis-banner analysis-{{ mem.analysis_state or 'waiting' }} memory-unified"
+     id="memory-banner"
+     data-analysis-state="{{ mem.analysis_state or 'waiting' }}">
   <div class="analysis-banner-main">
     <div class="stat-label">Gemeinsamer Memory-Stand · Status &amp; History</div>
-    <div class="stat-value" style="font-size:1.1rem;">{{ mem.analysis_label or '—' }}</div>
-    <p class="hint" style="margin:6px 0 0;">{{ m.note or '' }}</p>
+    <div class="stat-value" style="font-size:1.1rem;" id="mem-analysis-label">{{ mem.analysis_label or '—' }}</div>
+    <p class="hint" style="margin:6px 0 0;" id="mem-note">{{ m.note or '' }}</p>
   </div>
   <div class="analysis-banner-meta">
     <div>
       <div class="stat-label">Prozess / Detektor seit</div>
-      <div class="mono">
+      <div class="mono" id="mem-process-started">
         {% if p.started_at %}
           {{ time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(p.started_at)) }}
         {% else %}—{% endif %}
       </div>
-      <div class="hint">Uptime {{ up_h }}h {{ up_m }}m {{ up_s }}s · {{ p.lines_processed or 0 }} Log-Zeilen gelesen</div>
+      <div class="hint" id="mem-process-uptime">Uptime {{ up_h }}h {{ up_m }}m {{ up_s }}s · <span id="mem-lines">{{ p.lines_processed or 0 }}</span> Log-Zeilen gelesen</div>
     </div>
     <div>
       <div class="stat-label">Memory-Session seit</div>
-      <div class="mono">
+      <div class="mono" id="mem-session-started">
         {% if m.session_started_at %}
           {{ time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(m.session_started_at)) }}
         {% else %}—{% endif %}
       </div>
-      <div class="hint">
-        #{{ m.session_generation or 1 }} · {{ m.fill_label or m.fill_mode or '—' }}
-        {% if m.session_recorded %} · {{ m.session_recorded }} in Session{% endif %}
+      <div class="hint" id="mem-session-meta">
+        #<span id="mem-session-gen">{{ m.session_generation or 1 }}</span> · <span id="mem-fill-label">{{ m.fill_label or m.fill_mode or '—' }}</span>
+        · <span id="mem-session-recorded">{{ m.session_recorded or 0 }}</span> in Session
       </div>
     </div>
     <div>
       <div class="stat-label">Ring (History-Daten)</div>
-      <div class="mono">{{ m.size or 0 }} / {{ m.max or '—' }}</div>
-      {% if m.oldest_ts and m.newest_ts and m.size %}
-        <div class="hint">
+      <div class="mono"><span id="mem-ring-size">{{ m.size or 0 }}</span> / <span id="mem-ring-max">{{ m.max or '—' }}</span></div>
+      <div class="hint" id="mem-ring-range">
+        {% if m.oldest_ts and m.newest_ts and m.size %}
           Inhalt {{ time.strftime('%Y-%m-%d %H:%M', time.localtime(m.oldest_ts)) }}
           – {{ time.strftime('%H:%M:%S', time.localtime(m.newest_ts)) }}
-        </div>
-      {% else %}
-        <div class="hint">leer — Live-Tail und/oder Reset &amp; laden</div>
-      {% endif %}
+        {% else %}
+          leer — Live-Tail und/oder Reset &amp; laden
+        {% endif %}
+      </div>
     </div>
     <div>
       <div class="stat-label">Letzte Log-Zeile (Tail)</div>
-      <div class="mono">
+      <div class="mono" id="mem-last-line">
         {% if p.last_line_at %}
           {{ time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(p.last_line_at)) }}
         {% else %}noch keine{% endif %}
       </div>
-      {% if p.last_line_at and mem.now %}
-        <div class="hint">vor {{ ((mem.now - p.last_line_at)|int) }}s</div>
-      {% endif %}
+      <div class="hint" id="mem-last-line-age">
+        {% if p.last_line_at and mem.now %}vor {{ ((mem.now - p.last_line_at)|int) }}s{% else %}—{% endif %}
+      </div>
     </div>
   </div>
 </div>
