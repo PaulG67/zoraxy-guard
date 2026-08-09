@@ -142,12 +142,16 @@ class AccessHistory:
 
     def buffer_info(self) -> dict[str, Any]:
         with self._lock:
+            oldest = self._events[0].ts if self._events else 0.0
+            newest = self._events[-1].ts if self._events else 0.0
             return {
                 "size": len(self._events),
                 "max": self.max_events,
                 "recorded_total": self.recorded,
                 "pruned_old": self.dropped_old,
                 "retention_hours": 24,
+                "oldest_ts": oldest,
+                "newest_ts": newest,
             }
 
     def clear(self) -> None:

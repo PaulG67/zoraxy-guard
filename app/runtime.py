@@ -196,8 +196,40 @@ class Runtime:
             if self.threats:
                 sources = dict(self.threats.sources)
                 net_count = len(self.threats.block_nets)
+            now = time.time()
+            hb = self.history.buffer_info()
+            last_line = self.last_line_at or 0.0
+            if last_line:
+                age_line = now - last_line
+            else:
+                age_line = None
+            # Live if saw lines recently; idle if started but never; stale if long silence
+            if last_line and age_line is not None and age_line < 120:
+                analysis_state = "live"
+                analysis_label = "Live — Logs werden gelesen"
+            elif last_line and age_line is not None and age_line < 900:
+                analysis_state = "quiet"
+                analysis_label = "Ruhig — keine neuen Zeilen seit ein paar Minuten"
+            elif last_line:
+                analysis_state = "stale"
+                analysis_label = "Stille — lange keine neuen Log-Zeilen"
+            elif self.lines_processed == 0:
+                analysis_state = "waiting"
+                analysis_label = "Wartend — noch keine Log-Zeilen in dieser Laufzeit"
+            else:
+                analysis_state = "idle"
+                analysis_label = "Kein aktueller Traffic"
+
+            min_sev = ""
+            try:
+                min_sev = str((self.cfg or {}).get("alerts", {}) or {}).get("min_severity") or "medium"
+            except Exception:
+                min_sev = "medium"
+
             return {
+                "now": now,
                 "started_at": self.started_at,
+                "uptime_sec": max(0, int(now - self.started_at)),
                 "lines_processed": self.lines_processed,
                 "alerts_sent": self.alerts_sent,
                 "last_line_at": self.last_line_at,
@@ -209,8 +241,11 @@ class Runtime:
                 "threat_networks": net_count,
                 "recent_alerts": list(self.recent_alerts)[:50],
                 "config_path": self.config_path,
-                "history_buffer": self.history.buffer_info(),
+                "history_buffer": hb,
                 "backfill": dict(self.backfill),
+                "analysis_state": analysis_state,
+                "analysis_label": analysis_label,
+                "min_severity": min_sev,
             }
 
 

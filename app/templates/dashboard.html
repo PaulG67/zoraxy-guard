@@ -2,14 +2,68 @@
 {% block title %}Status · {{ app_name }}{% endblock %}
 {% block content %}
 
+{% set up = snap.uptime_sec or 0 %}
+{% set up_h = (up // 3600) %}
+{% set up_m = ((up % 3600) // 60) %}
+{% set up_s = (up % 60) %}
+{% set hb = snap.history_buffer or {} %}
+
+<div class="card analysis-banner analysis-{{ snap.analysis_state or 'waiting' }}">
+  <div class="analysis-banner-main">
+    <div class="stat-label">Analyse-Status</div>
+    <div class="stat-value" style="font-size:1.15rem;">{{ snap.analysis_label or '—' }}</div>
+  </div>
+  <div class="analysis-banner-meta">
+    <div>
+      <div class="stat-label">Überwachung seit</div>
+      <div class="mono">
+        {% if snap.started_at %}
+          {{ time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(snap.started_at)) }}
+        {% else %}—{% endif %}
+      </div>
+      <div class="hint">Laufzeit {{ up_h }}h {{ up_m }}m {{ up_s }}s (seit Container-/Process-Start)</div>
+    </div>
+    <div>
+      <div class="stat-label">Letzte gelesene Log-Zeile</div>
+      <div class="mono">
+        {% if snap.last_line_at %}
+          {{ time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(snap.last_line_at)) }}
+        {% else %}
+          noch keine
+        {% endif %}
+      </div>
+      {% if snap.last_line_at and snap.now %}
+        <div class="hint">vor {{ ((snap.now - snap.last_line_at)|int) }}s</div>
+      {% endif %}
+    </div>
+    <div>
+      <div class="stat-label">History im RAM</div>
+      <div class="mono">{{ hb.size or 0 }} / {{ hb.max or '—' }} Events</div>
+      {% if hb.oldest_ts and hb.newest_ts %}
+        <div class="hint">
+          von {{ time.strftime('%H:%M:%S', time.localtime(hb.oldest_ts)) }}
+          bis {{ time.strftime('%H:%M:%S', time.localtime(hb.newest_ts)) }}
+          {% if hb.oldest_ts %}
+            · ab {{ time.strftime('%Y-%m-%d %H:%M', time.localtime(hb.oldest_ts)) }}
+          {% endif %}
+        </div>
+      {% else %}
+        <div class="hint">leer — Live-Tail und/oder «Reset &amp; laden» auf History</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
 <div class="grid stats">
   <div class="card">
     <div class="stat-label">Zeilen verarbeitet</div>
     <div class="stat-value">{{ snap.lines_processed or 0 }}</div>
+    <div class="hint">seit {{ time.strftime('%d.%m. %H:%M', time.localtime(snap.started_at)) if snap.started_at else 'Start' }}</div>
   </div>
   <div class="card">
     <div class="stat-label">Alarme gesendet</div>
     <div class="stat-value">{{ snap.alerts_sent or 0 }}</div>
+    <div class="hint">Min. Severity: {{ snap.min_severity or 'medium' }}</div>
   </div>
   <div class="card">
     <div class="stat-label">Threat-Networks</div>
@@ -23,14 +77,60 @@
 
 <div class="card">
   <h2>Überwachung</h2>
-  <p><strong>Logs:</strong> <code>{{ snap.watching or '—' }}</code></p>
-  <p class="muted">Config: <code>{{ snap.config_path }}</code></p>
+  <table class="detail-table status-meta-table">
+    <tbody>
+      <tr>
+        <th>Analyse ab</th>
+        <td class="mono">
+          {% if snap.started_at %}{{ time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(snap.started_at)) }}{% else %}—{% endif %}
+          <span class="muted"> ({{ up_h }}h {{ up_m }}m uptime)</span>
+        </td>
+      </tr>
+      <tr>
+        <th>Letzter Config-/Listen-Reload</th>
+        <td class="mono">
+          {% if snap.last_reload_at %}{{ time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(snap.last_reload_at)) }}{% else %}—{% endif %}
+        </td>
+      </tr>
+      <tr>
+        <th>Logs</th>
+        <td><code>{{ snap.watching or '—' }}</code></td>
+      </tr>
+      <tr>
+        <th>Config</th>
+        <td><code>{{ snap.config_path or '—' }}</code></td>
+      </tr>
+      {% if snap.log_files %}
+      <tr>
+        <th>Aktuelle Dateien</th>
+        <td class="muted">{{ snap.log_files|join(', ') }}</td>
+      </tr>
+      {% endif %}
+      <tr>
+        <th>History gesamt erfasst</th>
+        <td>{{ hb.recorded_total or 0 }} Requests (Ring behält max. {{ hb.max or '—' }})</td>
+      </tr>
+      {% if snap.backfill and (snap.backfill.message or snap.backfill.running) %}
+      <tr>
+        <th>Disk-Nachladen</th>
+        <td class="{% if snap.backfill.running %}is-running{% endif %}{% if snap.backfill.error %} err-text{% endif %}">
+          {{ snap.backfill.message or '—' }}
+          {% if snap.backfill.finished_at %}
+            <span class="muted mono"> · {{ time.strftime('%H:%M:%S', time.localtime(snap.backfill.finished_at)) }}</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endif %}
+    </tbody>
+  </table>
   {% if snap.last_error %}
     <p class="flash error">Letzter Fehler: {{ snap.last_error }}</p>
   {% endif %}
-  {% if snap.log_files %}
-    <p class="muted">Dateien: {{ snap.log_files|join(', ') }}</p>
-  {% endif %}
+  <p class="hint" style="margin-bottom:0;">
+    Live-Analyse startet mit dem Container und liest nur neue Log-Zeilen (tail).
+    Ältere Logs erscheinen erst nach «Reset &amp; laden» im History-Tab.
+    Alarme erscheinen nur, wenn Severity ≥ <code>{{ snap.min_severity or 'medium' }}</code> — kein Alarm = oft «alles ruhig», nicht «keine Analyse».
+  </p>
 </div>
 
 <div class="actions">
@@ -43,6 +143,7 @@
   <form method="post" action="{{ url_for('action_reload_config') }}">
     <button type="submit">Config neu laden</button>
   </form>
+  <a class="btn" href="{{ url_for('history_page') }}">Zur History</a>
 </div>
 
 <div class="card">
@@ -96,7 +197,14 @@
     {% endfor %}
   </div>
   {% else %}
-  <p class="muted">Noch keine Alarme in dieser Laufzeit.</p>
+  <p class="muted" style="margin-bottom:6px;">Noch keine Alarme in dieser Laufzeit.</p>
+  <p class="hint" style="margin:0;">
+    Das heißt nicht, dass nichts analysiert wird.
+    Seit {% if snap.started_at %}<strong class="mono">{{ time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(snap.started_at)) }}</strong>{% else %}Start{% endif %}
+    wurden <strong>{{ snap.lines_processed or 0 }}</strong> Log-Zeilen verarbeitet
+    {% if snap.alerts_sent %} und {{ snap.alerts_sent }} Alarme ausgelöst{% else %}; es gab keinen Treffer ab Severity «{{ snap.min_severity or 'medium' }}»{% endif %}.
+    Zugriffe und Risiko-Bewertung: <a href="{{ url_for('history_page') }}">History</a>.
+  </p>
   {% endif %}
 </div>
 
