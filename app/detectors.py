@@ -9,6 +9,7 @@ from typing import Deque, Dict, List, Optional, Tuple
 from .feeds import ThreatLists, find_list_match
 from .iputil import IpAddress, IpNetwork, ip_in_networks, parse_ip
 from .parser import LogEvent
+from .risk import assess_access
 
 SEVERITY_RANK = {"info": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 
@@ -140,22 +141,52 @@ class Detector:
                 )
                 break
 
-        # 3) Exploit path probes
+        # 3) Exploit path probes — risk-aware (3xx SPA redirect ≠ leak)
         if self._path_is_exploit(path):
             q = self._exploit_times[client]
             q.append(now)
             n = self._prune(q, self.exploit_window, now)
-            # Successful response on exploit path is worst
-            if 200 <= status < 400:
+            verdict = assess_access(
+                path=path,
+                status=status,
+                method=event.method,
+                router=router,
+                user_agent=event.user_agent,
+                origin=origin,
+                extra_exploit_paths=[
+                    r[1] if r[0] == "sub" else "" for r in self.exploit_rules
+                ],
+            )
+            if verdict.level == "action" and 200 <= status < 300:
                 alerts.append(
                     Alert(
                         severity="critical",
-                        title="Exploit-Pfad mit Erfolg (HTTP 2xx/3xx)",
-                        body=f"{client} holte {path} von {origin or '-'} mit Status {status}. Sofort prüfen!",
+                        title="Exploit-Pfad mit Erfolg (HTTP 2xx) — prüfen",
+                        body=(
+                            f"{client} holte {path} von {origin or '-'} mit Status {status}. "
+                            f"{verdict.detail}"
+                        ),
                         fingerprint=f"exploit-ok:{client}:{path}",
                         event=event,
                     )
                 )
+            elif status in (301, 302, 303, 307, 308):
+                # Soft: redirect to login/SPA — do not escalate as critical leak
+                if n >= self.exploit_hits:
+                    alerts.append(
+                        Alert(
+                            severity="low",
+                            title="Exploit-Scan (Redirect, unbedenklich)",
+                            body=(
+                                f"{client}: {n} Probe-Pfade in {self.exploit_window}s, "
+                                f"zuletzt {path} → {status} @ {origin or '-'} "
+                                f"(typisch SPA/Login-Redirect, z. B. Navidrome). "
+                                f"{verdict.title}"
+                            ),
+                            fingerprint=f"exploit-scan-redirect:{client}",
+                            event=event,
+                        )
+                    )
             elif n >= self.exploit_hits:
                 alerts.append(
                     Alert(
@@ -169,12 +200,22 @@ class Detector:
                         event=event,
                     )
                 )
+            elif status >= 400 or router in ("blacklist", "whitelist"):
+                alerts.append(
+                    Alert(
+                        severity="low",
+                        title="Exploit-Probe (abgewiesen)",
+                        body=f"{client} {event.method} {path} → {status} ({router}, {origin or '-'})",
+                        fingerprint=f"exploit-probe:{client}:{path}",
+                        event=event,
+                    )
+                )
             else:
                 alerts.append(
                     Alert(
                         severity="low",
                         title="Exploit-Probe",
-                        body=f"{client} {event.method} {path} → {status} ({router}, {origin or '-'})",
+                        body=f"{client} {event.method} {path} → {status} ({router}, {origin or '-'}) — {verdict.title}",
                         fingerprint=f"exploit-probe:{client}:{path}",
                         event=event,
                     )

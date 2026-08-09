@@ -132,6 +132,8 @@ def create_app(config_path: str) -> Flask:
         q = (request.args.get("q") or "").strip()
         only_success = request.args.get("ok") in ("1", "on", "true", "yes")
         only_failed = request.args.get("fail") in ("1", "on", "true", "yes")
+        only_action = request.args.get("action") in ("1", "on", "true", "yes")
+        only_noise = request.args.get("noise") in ("1", "on", "true", "yes")
         data = rt.RUNTIME.history.snapshot(
             window=window,
             view=view,
@@ -140,6 +142,8 @@ def create_app(config_path: str) -> Flask:
             threats=rt.RUNTIME.threats,
             only_success=only_success,
             only_failed=only_failed,
+            only_action=only_action,
+            only_noise=only_noise,
         )
         with rt.RUNTIME.lock:
             backfill = dict(rt.RUNTIME.backfill)

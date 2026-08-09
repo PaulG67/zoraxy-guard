@@ -94,6 +94,18 @@
              onchange="histExclusive(this, 'flt_ok'); this.form.submit();">
       <span>Nur nicht erfolgreich (4xx/5xx, …)</span>
     </label>
+    <label class="hist-check">
+      <input type="checkbox" name="action" value="1" id="flt_action"
+             {% if data.only_action %}checked{% endif %}
+             onchange="histExclusive(this, 'flt_noise'); this.form.submit();">
+      <span>Nur Handlungsbedarf (Risiko-Engine)</span>
+    </label>
+    <label class="hist-check">
+      <input type="checkbox" name="noise" value="1" id="flt_noise"
+             {% if data.only_noise %}checked{% endif %}
+             onchange="histExclusive(this, 'flt_action'); this.form.submit();">
+      <span>Nur Scanner-Lärm (unbedenklich)</span>
+    </label>
   </div>
 </form>
 <script>
@@ -111,12 +123,16 @@ function histExclusive(el, otherId) {
     <div class="stat-value">{{ data.total_in_window }}</div>
   </div>
   <div class="card">
-    <div class="stat-label">Geblockt</div>
-    <div class="stat-value {% if data.blocked.total %}text-warn{% endif %}">{{ data.blocked.total }}</div>
+    <div class="stat-label">Handlungsbedarf</div>
+    <div class="stat-value {% if data.action_count %}text-warn{% endif %}">{{ data.action_count }}</div>
   </div>
   <div class="card">
-    <div class="stat-label">Block-IPs</div>
-    <div class="stat-value">{{ data.blocked.unique_ips }}</div>
+    <div class="stat-label">Scanner-Lärm</div>
+    <div class="stat-value">{{ data.noise_count }}</div>
+  </div>
+  <div class="card">
+    <div class="stat-label">Geblockt</div>
+    <div class="stat-value {% if data.blocked.total %}text-warn{% endif %}">{{ data.blocked.total }}</div>
   </div>
   <div class="card">
     <div class="stat-label">Apps / Client-IPs</div>
@@ -187,6 +203,7 @@ function histExclusive(el, otherId) {
               <th>App / Host</th>
               <th>Request</th>
               <th>Status</th>
+              <th>Risiko</th>
               <th>Grund</th>
             </tr>
           </thead>
@@ -218,6 +235,11 @@ function histExclusive(el, otherId) {
                 <td>
                   <span class="st-badge st-{{ (s.status // 100) if s.status else 0 }}">{{ s.status or '—' }}</span>
                   <div class="muted mono" style="font-size:0.75rem;">{{ s.router or '—' }}</div>
+                </td>
+                <td>
+                  {% if s.risk %}
+                    <span class="risk-badge risk-{{ s.risk.level }}" title="{{ s.risk.detail }}">{{ s.risk.title }}</span>
+                  {% else %}—{% endif %}
                 </td>
                 <td>
                   {% for r in s.reasons %}
@@ -310,13 +332,14 @@ function histExclusive(el, otherId) {
                   <th>Methode</th>
                   <th>Pfad</th>
                   <th>Status</th>
+                  <th>Risiko</th>
                   <th>Router</th>
                   <th>User-Agent</th>
                 </tr>
               </thead>
               <tbody>
                 {% for s in g.samples %}
-                  <tr class="{% if s.blocked %}row-blocked{% endif %}">
+                  <tr class="{% if s.blocked %}row-blocked{% endif %} {% if s.risk and s.risk.action_needed %}row-action{% endif %}">
                     <td class="mono nowrap">{{ time.strftime('%H:%M:%S', time.localtime(s.ts)) }}</td>
                     <td class="mono">
                       {% if data.view == 'app' %}
@@ -338,6 +361,11 @@ function histExclusive(el, otherId) {
                     <td class="mono">{{ s.method }}</td>
                     <td class="mono path-cell" title="{{ s.path }}">{{ s.path }}</td>
                     <td><span class="st-badge st-{{ (s.status // 100) if s.status else 0 }}">{{ s.status or '—' }}</span></td>
+                    <td>
+                      {% if s.risk %}
+                        <span class="risk-badge risk-{{ s.risk.level }}" title="{{ s.risk.detail }}">{{ s.risk.title }}</span>
+                      {% else %}—{% endif %}
+                    </td>
                     <td class="muted mono">{{ s.router or '—' }}</td>
                     <td class="muted ua-cell" title="{{ s.ua }}">{{ s.ua or '—' }}</td>
                   </tr>

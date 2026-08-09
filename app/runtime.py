@@ -13,6 +13,7 @@ from .history import AccessHistory, DEFAULT_MAX_EVENTS
 from .geoip import GeoCache
 from .iputil import parse_ip
 from .parser import LogEvent
+from .risk import assess_access
 
 
 def _ip_class(ip_str: str) -> str:
@@ -62,6 +63,16 @@ def build_alert_record(alert: Alert, threats: Optional[ThreatLists] = None) -> d
     if not threat_list and threats and client:
         threat_list = find_list_match(client.split("%")[0], threats)
 
+    risk = assess_access(
+        path=path,
+        status=int(status or 0),
+        method=method,
+        router=router,
+        user_agent=ua,
+        origin=origin,
+        threat_list=threat_list,
+    )
+
     # short summary line for table
     summary_bits = []
     if client:
@@ -72,6 +83,7 @@ def build_alert_record(alert: Alert, threats: Optional[ThreatLists] = None) -> d
         summary_bits.append(f"{method} {path[:80]}")
     if status is not None:
         summary_bits.append(f"HTTP {status}")
+    summary_bits.append(risk.title)
     summary = " · ".join(summary_bits) if summary_bits else (alert.body or "")[:160]
 
     details = {
@@ -79,6 +91,10 @@ def build_alert_record(alert: Alert, threats: Optional[ThreatLists] = None) -> d
         "Zeit (Log)": log_ts or "—",
         "Severity": alert.severity,
         "Fingerprint": alert.fingerprint,
+        "Risiko-Einschätzung": risk.title,
+        "Handlung nötig?": "Ja" if risk.action_needed else "Nein (eher Scanner-Lärm / unbedenklich)",
+        "Bewertung": risk.detail,
+        "Risiko-Level": risk.level,
         "Quell-IP (Client)": client or "—",
         "Quell-IP-Klasse": _ip_class(client),
         "IP-Version": client_version,
@@ -109,6 +125,7 @@ def build_alert_record(alert: Alert, threats: Optional[ThreatLists] = None) -> d
         "user_agent": ua,
         "threat_list": threat_list,
         "client_class": _ip_class(client),
+        "risk": risk.as_dict(),
         "details": details,
         "raw": raw[:900],
     }

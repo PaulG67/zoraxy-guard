@@ -10,6 +10,7 @@ from typing import Any, Deque, DefaultDict, Optional, TYPE_CHECKING
 
 from .feeds import find_list_match
 from .iputil import parse_ip
+from .risk import assess_access
 
 if TYPE_CHECKING:
     from .feeds import ThreatLists
@@ -179,6 +180,8 @@ class AccessHistory:
         blocked_sample_limit: int = 40,
         only_success: bool = False,
         only_failed: bool = False,
+        only_action: bool = False,
+        only_noise: bool = False,
     ) -> dict[str, Any]:
         sec = WINDOWS.get(window, 3600)
         now = time.time()
@@ -188,6 +191,8 @@ class AccessHistory:
         # Mutual exclusivity: if both, prefer success (UI usually sends one)
         if only_success and only_failed:
             only_failed = False
+        if only_action and only_noise:
+            only_noise = False
 
         with self._lock:
             self._prune_locked(now - MAX_WINDOW_SEC)
@@ -213,6 +218,28 @@ class AccessHistory:
             events = [e for e in events if is_success(e)]
         elif only_failed:
             events = [e for e in events if is_failed(e)]
+
+        def risk_for(e: AccessEvent, tl: Optional[str] = None) -> dict:
+            return assess_access(
+                path=e.path,
+                status=e.status,
+                method=e.method,
+                router=e.router,
+                user_agent=e.ua,
+                origin=e.origin,
+                threat_list=tl,
+            ).as_dict()
+
+        # Pre-filter by risk when requested (needs assessment per event)
+        if only_action or only_noise:
+            filtered = []
+            for e in events:
+                r = risk_for(e)
+                if only_action and r.get("action_needed"):
+                    filtered.append(e)
+                elif only_noise and r.get("level") == "noise":
+                    filtered.append(e)
+            events = filtered
 
         # Geo for all client IPs in window (cached; few API misses)
         clients = {e.client for e in events}
@@ -242,6 +269,8 @@ class AccessHistory:
             reverse=True,
         )[:limit_groups]
 
+        action_count = 0
+        noise_count = 0
         out_groups = []
         for key, items in ranked:
             items_sorted = list(reversed(items[-samples_per_group:]))
@@ -257,6 +286,11 @@ class AccessHistory:
                 partners[partner] += 1
                 if is_blocked(e):
                     blocked_n += 1
+                r = risk_for(e)
+                if r.get("action_needed"):
+                    action_count += 1
+                if r.get("level") == "noise":
+                    noise_count += 1
                 if view == "app":
                     gi = ginfo(e.client)
                     cc = gi.get("country_code") or gi.get("country") or "?"
@@ -269,6 +303,26 @@ class AccessHistory:
             top_partners = sorted(partners.items(), key=lambda x: -x[1])[:8]
             top_countries = sorted(countries.items(), key=lambda x: -x[1])[:6]
             key_geo = ginfo(key) if view == "ip" else None
+
+            sample_rows = []
+            for e in items_sorted:
+                tl = self._threat_for(e.client, threats)
+                sample_rows.append(
+                    {
+                        "ts": e.ts,
+                        "client": e.client,
+                        "origin": e.origin,
+                        "method": e.method,
+                        "path": e.path,
+                        "status": e.status,
+                        "router": e.router,
+                        "ua": e.ua,
+                        "blocked": is_blocked(e),
+                        "geo": ginfo(e.client),
+                        "threat_list": tl,
+                        "risk": risk_for(e, tl),
+                    }
+                )
 
             out_groups.append(
                 {
@@ -283,22 +337,7 @@ class AccessHistory:
                     "partners_top": top_partners,
                     "countries_top": top_countries,
                     "geo": key_geo,
-                    "samples": [
-                        {
-                            "ts": e.ts,
-                            "client": e.client,
-                            "origin": e.origin,
-                            "method": e.method,
-                            "path": e.path,
-                            "status": e.status,
-                            "router": e.router,
-                            "ua": e.ua,
-                            "blocked": is_blocked(e),
-                            "geo": ginfo(e.client),
-                            "threat_list": self._threat_for(e.client, threats),
-                        }
-                        for e in items_sorted
-                    ],
+                    "samples": sample_rows,
                 }
             )
 
@@ -325,6 +364,7 @@ class AccessHistory:
         blocked_samples = []
         for e in reversed(blocked_events[-blocked_sample_limit:]):
             tl = self._threat_for(e.client, threats)
+            rv = risk_for(e, tl)
             blocked_samples.append(
                 {
                     "ts": e.ts,
@@ -338,6 +378,7 @@ class AccessHistory:
                     "geo": ginfo(e.client),
                     "threat_list": tl,
                     "reasons": block_reasons(e, tl),
+                    "risk": rv,
                 }
             )
 
@@ -350,9 +391,13 @@ class AccessHistory:
             "query": q,
             "only_success": only_success,
             "only_failed": only_failed,
+            "only_action": only_action,
+            "only_noise": only_noise,
             "now": now,
             "total_in_window": len(events),
             "total_before_status_filter": total_before_status,
+            "action_count": action_count,
+            "noise_count": noise_count,
             "unique_ips": len(unique_ips),
             "unique_apps": len(unique_apps),
             "groups": out_groups,

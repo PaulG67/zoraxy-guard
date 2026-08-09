@@ -70,6 +70,9 @@
       <summary>
         <span class="muted mono">{{ time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(a.ts)) if a.ts else '—' }}</span>
         <span class="sev {{ a.severity }}">{{ a.severity }}</span>
+        {% if a.risk %}
+          <span class="risk-badge risk-{{ a.risk.level }}" title="{{ a.risk.detail }}">{{ a.risk.title }}</span>
+        {% endif %}
         <span class="alert-title">{{ a.title }}</span>
         <span class="muted alert-summary">{{ a.summary or a.body }}</span>
       </summary>
