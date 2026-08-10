@@ -182,20 +182,26 @@ def assess_access(
 
     # Auth portal: path is "/" but query has scanner-bait redirect URLs
     path_core = _path_only(path)
-        if 200 <= status < 300 and path_core in ("/", "/login", "/if/flow") and (
-            "redirect" in path.lower() or "next=" in path.lower() or "goto=" in path.lower()
-        ):
-            return RiskVerdict(
-                level="noise",
-                score=12,
-                title="Auth-Redirect-Parameter (unbedenklich)",
-                detail=(
-                    f"Pfad «{path_core}» mit Redirect-Query. "
-                    "Typisch für Authentik/SSO — keine ausgelieferte Webshell-Datei."
-                ),
-                action_needed=False,
-                tags=tuple(tags + ["sso-redirect-query"]),
-            )
+    if (
+        200 <= status < 300
+        and path_core in ("/", "/login", "/if/flow")
+        and (
+            "redirect" in path.lower()
+            or "next=" in path.lower()
+            or "goto=" in path.lower()
+        )
+    ):
+        return RiskVerdict(
+            level="noise",
+            score=12,
+            title="Auth-Redirect-Parameter (unbedenklich)",
+            detail=(
+                f"Pfad «{path_core}» mit Redirect-Query. "
+                "Typisch für Authentik/SSO — keine ausgelieferte Webshell-Datei."
+            ),
+            action_needed=False,
+            tags=tuple(tags + ["sso-redirect-query"]),
+        )
 
     # Explicitly blocked by proxy
     if blocked_router or status in (401, 403, 429, 451):
