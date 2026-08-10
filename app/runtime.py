@@ -6,6 +6,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Deque, Dict, List, Optional
 
+from .acks import AckStore, DEFAULT_ACK_PATH
 from .alerter import Alerter
 from .detectors import Alert, Detector
 from .feeds import ThreatLists, find_list_match
@@ -126,6 +127,8 @@ def build_alert_record(alert: Alert, threats: Optional[ThreatLists] = None) -> d
         "threat_list": threat_list,
         "client_class": _ip_class(client),
         "risk": risk.as_dict(),
+        "fingerprint": alert.fingerprint,
+        "acked": False,
         "details": details,
         "raw": raw[:900],
     }
@@ -174,6 +177,7 @@ class Runtime:
             "message": "",
         }
     )
+    acks: AckStore = field(default_factory=lambda: AckStore(DEFAULT_ACK_PATH))
 
     def request_reload(self) -> None:
         with self.lock:
@@ -185,9 +189,53 @@ class Runtime:
 
     def note_alert(self, alert: Alert) -> None:
         record = build_alert_record(alert, self.threats)
+        fp = alert.fingerprint
+        acked_meta = self.acks.get(fp) if fp else None
+        if acked_meta:
+            record["acked"] = True
+            record["acked_at"] = acked_meta.get("ts")
+            record["ack_note"] = acked_meta.get("note") or ""
+            if record.get("risk"):
+                record["risk"] = dict(record["risk"])
+                record["risk"]["action_needed"] = False
+                record["risk"]["level"] = "safe"
+                record["risk"]["title"] = "Geprüft"
+                record["risk"]["detail"] = "Manuell als geprüft markiert."
+            if isinstance(record.get("details"), dict):
+                record["details"] = dict(record["details"])
+                record["details"]["Handlung nötig?"] = "Nein (geprüft)"
+                record["details"]["Risiko-Einschätzung"] = "Geprüft"
+        else:
+            record["acked"] = False
         with self.lock:
             self.alerts_sent += 1
             self.recent_alerts.appendleft(record)
+
+    def mark_alert_acked(self, fingerprint: str) -> bool:
+        """Update in-memory recent_alerts after disk ack."""
+        found = False
+        with self.lock:
+            for rec in self.recent_alerts:
+                if rec.get("fingerprint") == fingerprint or (
+                    rec.get("details") or {}
+                ).get("Fingerprint") == fingerprint:
+                    rec["acked"] = True
+                    rec["acked_at"] = time.time()
+                    if rec.get("risk"):
+                        rec["risk"] = dict(rec["risk"])
+                        rec["risk"]["action_needed"] = False
+                        rec["risk"]["level"] = "safe"
+                        rec["risk"]["title"] = "Geprüft"
+                        rec["risk"]["detail"] = "Manuell als geprüft markiert."
+                    if isinstance(rec.get("details"), dict):
+                        rec["details"] = dict(rec["details"])
+                        rec["details"]["Handlung nötig?"] = "Nein (geprüft)"
+                        rec["details"]["Risiko-Einschätzung"] = "Geprüft"
+                    found = True
+        return found
+
+    def is_alert_acked(self, fingerprint: str) -> bool:
+        return self.acks.is_acked(fingerprint) if fingerprint else False
 
     def memory_state(self) -> dict[str, Any]:
         """
@@ -281,6 +329,22 @@ class Runtime:
             if self.threats:
                 sources = dict(self.threats.sources)
                 net_count = len(self.threats.block_nets)
+            recent = []
+            for rec in list(self.recent_alerts)[:50]:
+                r = dict(rec)
+                fp = r.get("fingerprint") or ""
+                if fp and self.acks.is_acked(fp):
+                    r["acked"] = True
+                    meta = self.acks.get(fp) or {}
+                    r["acked_at"] = meta.get("ts")
+                    if r.get("risk"):
+                        r["risk"] = dict(r["risk"])
+                        r["risk"]["action_needed"] = False
+                        r["risk"]["level"] = "safe"
+                        r["risk"]["title"] = "Geprüft"
+                else:
+                    r.setdefault("acked", False)
+                recent.append(r)
             return {
                 **mem,
                 "started_at": mem["process"]["started_at"],
@@ -294,10 +358,11 @@ class Runtime:
                 "log_files": list(self.log_files),
                 "threat_sources": sources,
                 "threat_networks": net_count,
-                "recent_alerts": list(self.recent_alerts)[:50],
+                "recent_alerts": recent,
                 "config_path": self.config_path,
                 "history_buffer": self.history.buffer_info(),
                 "min_severity": mem["process"]["min_severity"],
+                "acked_count": self.acks.count(),
             }
 
 

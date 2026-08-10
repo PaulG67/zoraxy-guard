@@ -126,6 +126,47 @@ def create_app(config_path: str) -> Flask:
             return jsonify({"error": "runtime not ready"}), 503
         return jsonify(rt.RUNTIME.snapshot())
 
+    @app.route("/api/alerts/ack", methods=["POST"])
+    @login_required
+    def api_alert_ack():
+        """Mark alert fingerprint as reviewed (persisted under /data)."""
+        if not rt.RUNTIME:
+            return jsonify({"error": "runtime not ready"}), 503
+        data = request.get_json(silent=True) or {}
+        if request.form:
+            data = {**data, **request.form.to_dict()}
+        fp = (data.get("fingerprint") or "").strip()
+        if not fp:
+            return jsonify({"error": "fingerprint fehlt"}), 400
+        note = (data.get("note") or "").strip()
+        title = (data.get("title") or "").strip()
+        origin = (data.get("origin") or "").strip()
+        path = (data.get("path") or "").strip()
+        entry = rt.RUNTIME.acks.ack(fp, title=title, origin=origin, path=path, note=note)
+        rt.RUNTIME.mark_alert_acked(fp)
+        return jsonify({"ok": True, "fingerprint": fp, "ack": entry, "acked_count": rt.RUNTIME.acks.count()})
+
+    @app.route("/api/alerts/unack", methods=["POST"])
+    @login_required
+    def api_alert_unack():
+        if not rt.RUNTIME:
+            return jsonify({"error": "runtime not ready"}), 503
+        data = request.get_json(silent=True) or {}
+        if request.form:
+            data = {**data, **request.form.to_dict()}
+        fp = (data.get("fingerprint") or "").strip()
+        if not fp:
+            return jsonify({"error": "fingerprint fehlt"}), 400
+        ok = rt.RUNTIME.acks.unack(fp)
+        # Refresh open records if still in recent list
+        with rt.RUNTIME.lock:
+            for rec in rt.RUNTIME.recent_alerts:
+                if rec.get("fingerprint") == fp:
+                    rec["acked"] = False
+                    if rec.get("risk"):
+                        rec["risk"] = dict(rec["risk"])
+        return jsonify({"ok": ok, "fingerprint": fp, "acked_count": rt.RUNTIME.acks.count()})
+
     @app.route("/history")
     @login_required
     def history_page():

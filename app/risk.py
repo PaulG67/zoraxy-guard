@@ -96,12 +96,42 @@ class RiskVerdict:
         }
 
 
+def _path_only(path: str) -> str:
+    """Strip query string so OAuth redirect URLs don't look like exploit paths."""
+    p = path or "/"
+    if "?" in p:
+        p = p.split("?", 1)[0]
+    if "#" in p:
+        p = p.split("#", 1)[0]
+    return p or "/"
+
+
 def _path_matches(path: str, fragments: Iterable[str]) -> Optional[str]:
-    low = (path or "").lower()
+    # Match against path component only (not ?redirect=...wp-admin...)
+    low = _path_only(path).lower()
     for f in fragments:
         if f.lower() in low:
             return f
     return None
+
+
+def review_key(
+    *,
+    kind: str = "access",
+    client: str = "",
+    path: str = "",
+    origin: str = "",
+    status: int = 0,
+) -> str:
+    """Stable id for acknowledging a finding (aligned with alert fingerprints)."""
+    client = (client or "?").strip()
+    path = path or "/"
+    origin = (origin or "").lower().rstrip(".")
+    if kind == "exploit-ok":
+        return f"exploit-ok:{client}:{path}"
+    if kind == "sensitive-ok":
+        return f"sensitive-ok:{client}:{origin}"
+    return f"access:{client}:{origin}:{path}:{status}"
 
 
 def assess_access(
@@ -143,12 +173,29 @@ def assess_access(
     hard = _path_matches(path, HARD_LEAK_FRAGMENTS)
 
     if extra_exploit_paths:
-        low = path.lower()
+        low = _path_only(path).lower()
         for p in extra_exploit_paths:
             p = str(p).lower()
             if p and p in low and not probe:
                 probe = p
                 tags.append("config-path")
+
+    # Auth portal: path is "/" but query has scanner-bait redirect URLs
+    path_core = _path_only(path)
+        if 200 <= status < 300 and path_core in ("/", "/login", "/if/flow") and (
+            "redirect" in path.lower() or "next=" in path.lower() or "goto=" in path.lower()
+        ):
+            return RiskVerdict(
+                level="noise",
+                score=12,
+                title="Auth-Redirect-Parameter (unbedenklich)",
+                detail=(
+                    f"Pfad «{path_core}» mit Redirect-Query. "
+                    "Typisch für Authentik/SSO — keine ausgelieferte Webshell-Datei."
+                ),
+                action_needed=False,
+                tags=tuple(tags + ["sso-redirect-query"]),
+            )
 
     # Explicitly blocked by proxy
     if blocked_router or status in (401, 403, 429, 451):

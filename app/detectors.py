@@ -65,14 +65,17 @@ class Detector:
         return compiled
 
     def _path_is_exploit(self, path: str) -> bool:
+        # Only path component — ignore ?redirect=…wp-admin… (SSO false positives)
         low = path.lower()
+        if "?" in low:
+            low = low.split("?", 1)[0]
         for ign in self.exploit_ignore:
             if ign and ign in low:
                 return False
         for kind, rule in self.exploit_rules:
             if kind == "sub" and rule in low:
                 return True
-            if kind == "re" and rule.search(path):
+            if kind == "re" and rule.search(path.split("?", 1)[0]):
                 return True
         return False
 

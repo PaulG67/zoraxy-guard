@@ -130,13 +130,35 @@
         '<p class="hint" style="margin:0;">Memory/History laufen weiter (Banner). Kein Full-Reload nötig.</p>';
       return;
     }
+    var showOpen = document.getElementById("filter-open-only");
+    var onlyOpen = showOpen && showOpen.checked;
+    var filtered = list.filter(function (a) {
+      if (!onlyOpen) return true;
+      return !a.acked && !(a.risk && a.risk.action_needed === false && a.risk.title === "Geprüft");
+    });
+    // Hide fully acked when only-open: also hide action_needed false that were acked
+    filtered = onlyOpen
+      ? list.filter(function (a) { return !a.acked && (!a.risk || a.risk.action_needed); })
+      : list;
+    if (!filtered.length) {
+      box.innerHTML =
+        '<p class="muted">Keine offenen Alarme' +
+        (onlyOpen ? " (Filter: nur ungeprüft)" : "") +
+        ".</p>";
+      return;
+    }
     var html = '<div class="alert-list">';
-    list.forEach(function (a) {
+    filtered.forEach(function (a) {
+      var fp = a.fingerprint || (a.details && a.details.Fingerprint) || "";
+      var acked = !!a.acked;
       var risk = a.risk
         ? '<span class="risk-badge risk-' + (a.risk.level || "") + '" title="' +
           (a.risk.detail || "").replace(/"/g, "&quot;") + '">' +
           (a.risk.title || "") + "</span>"
         : "";
+      if (acked) {
+        risk += ' <span class="risk-badge risk-safe">Geprüft</span>';
+      }
       var rows = "";
       if (a.details) {
         Object.keys(a.details).forEach(function (k) {
@@ -148,8 +170,31 @@
           }
         });
       }
+      var actions = "";
+      if (fp) {
+        if (acked) {
+          actions =
+            '<div class="alert-actions">' +
+            '<button type="button" class="btn-ack-undo" data-fp="' +
+            encodeURIComponent(fp) +
+            '">Prüfung zurücknehmen</button></div>';
+        } else {
+          actions =
+            '<div class="alert-actions">' +
+            '<button type="button" class="primary btn-ack" data-fp="' +
+            encodeURIComponent(fp) +
+            '" data-title="' +
+            encodeURIComponent(a.title || "") +
+            '" data-origin="' +
+            encodeURIComponent(a.origin || "") +
+            '" data-path="' +
+            encodeURIComponent(a.path || "") +
+            '">Geprüft</button>' +
+            '<span class="hint">Markiert diesen Vorgang als erledigt (keine erneuten Alerts mit diesem Fingerprint).</span></div>';
+        }
+      }
       html +=
-        '<details class="alert-item"><summary>' +
+        '<details class="alert-item' + (acked ? " alert-acked" : "") + '"><summary>' +
         '<span class="muted mono">' + fmtTs(a.ts) + "</span>" +
         '<span class="sev ' + (a.severity || "") + '">' + (a.severity || "") + "</span>" +
         risk +
@@ -157,10 +202,76 @@
         '<span class="muted alert-summary">' + (a.summary || a.body || "") + "</span>" +
         "</summary><div class=\"alert-detail\">" +
         (rows ? '<table class="detail-table"><tbody>' + rows + "</tbody></table>" : "<p class=\"muted\">" + (a.body || "") + "</p>") +
+        actions +
         "</div></details>";
     });
     html += "</div>";
     box.innerHTML = html;
+    box.querySelectorAll(".btn-ack").forEach(function (btn) {
+      btn.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        ackAlert(btn);
+      });
+    });
+    box.querySelectorAll(".btn-ack-undo").forEach(function (btn) {
+      btn.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        unackAlert(btn);
+      });
+    });
+  }
+
+  async function ackAlert(btn) {
+    var fp = decodeURIComponent(btn.getAttribute("data-fp") || "");
+    if (!fp) return;
+    btn.disabled = true;
+    try {
+      var res = await fetch("/api/alerts/ack", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          fingerprint: fp,
+          title: decodeURIComponent(btn.getAttribute("data-title") || ""),
+          origin: decodeURIComponent(btn.getAttribute("data-origin") || ""),
+          path: decodeURIComponent(btn.getAttribute("data-path") || ""),
+        }),
+      });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      if (window.zoraxyGuardSoftRefresh) {
+        await window.zoraxyGuardSoftRefresh({ fullStatus: true, alerts: true });
+      } else {
+        window.location.reload();
+      }
+    } catch (e) {
+      alert("Geprüft fehlgeschlagen: " + e.message);
+      btn.disabled = false;
+    }
+  }
+
+  async function unackAlert(btn) {
+    var fp = decodeURIComponent(btn.getAttribute("data-fp") || "");
+    if (!fp) return;
+    btn.disabled = true;
+    try {
+      var res = await fetch("/api/alerts/unack", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({ fingerprint: fp }),
+      });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      if (window.zoraxyGuardSoftRefresh) {
+        await window.zoraxyGuardSoftRefresh({ fullStatus: true, alerts: true });
+      } else {
+        window.location.reload();
+      }
+    } catch (e) {
+      alert("Zurücknehmen fehlgeschlagen: " + e.message);
+      btn.disabled = false;
+    }
   }
 
   window.zoraxyGuardSoftRefresh = async function (opts) {

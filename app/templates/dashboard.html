@@ -139,17 +139,25 @@
 
 <div class="card" style="margin-top:14px">
   <h2>Letzte Alarme</h2>
+  <div class="soft-refresh-row" style="margin-bottom:10px;">
+    <label class="hist-check" style="margin:0;">
+      <input type="checkbox" id="filter-open-only" checked>
+      <span>Nur ungeprüft / Handlungsbedarf</span>
+    </label>
+    <span class="hint">Geprüft-Markierungen bleiben in <code>/data/acks.json</code> (Container-Neustart ok).</span>
+  </div>
   <div id="alerts-live">
   {% if snap.recent_alerts %}
   <div class="alert-list">
     {% for a in snap.recent_alerts %}
-    <details class="alert-item">
+    <details class="alert-item {% if a.acked %}alert-acked{% endif %}" data-fp="{{ a.fingerprint or '' }}" data-acked="{{ 1 if a.acked else 0 }}">
       <summary>
         <span class="muted mono">{{ time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(a.ts)) if a.ts else '—' }}</span>
         <span class="sev {{ a.severity }}">{{ a.severity }}</span>
         {% if a.risk %}
           <span class="risk-badge risk-{{ a.risk.level }}" title="{{ a.risk.detail }}">{{ a.risk.title }}</span>
         {% endif %}
+        {% if a.acked %}<span class="risk-badge risk-safe">Geprüft</span>{% endif %}
         <span class="alert-title">{{ a.title }}</span>
         <span class="muted alert-summary">{{ a.summary or a.body }}</span>
       </summary>
@@ -167,6 +175,20 @@
         </table>
         {% else %}
         <p class="muted">{{ a.body }}</p>
+        {% endif %}
+        {% if a.fingerprint %}
+        <div class="alert-actions">
+          {% if a.acked %}
+            <button type="button" class="btn-ack-undo" data-fp="{{ a.fingerprint|e }}">Prüfung zurücknehmen</button>
+          {% else %}
+            <button type="button" class="primary btn-ack"
+                    data-fp="{{ a.fingerprint|e }}"
+                    data-title="{{ (a.title or '')|e }}"
+                    data-origin="{{ (a.origin or '')|e }}"
+                    data-path="{{ (a.path or '')|e }}">Geprüft</button>
+            <span class="hint">Vorgang erledigt — keine erneuten Alerts mit diesem Fingerprint.</span>
+          {% endif %}
+        </div>
         {% endif %}
       </div>
     </details>
@@ -199,7 +221,37 @@
     if (auto && auto.checked) timer = setInterval(tick, 10000);
   }
   if (auto) auto.addEventListener("change", syncAuto);
+  var filt = document.getElementById("filter-open-only");
+  if (filt) filt.addEventListener("change", tick);
+  // Wire initial server-rendered ack buttons
+  document.querySelectorAll(".btn-ack, .btn-ack-undo").forEach(function (b) {
+    b.addEventListener("click", function (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (b.classList.contains("btn-ack-undo")) {
+        // reuse via soft refresh path after manual unack
+        fetch({{ url_for('api_alert_unack')|tojson }}, {
+          method: "POST", credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fingerprint: b.getAttribute("data-fp") })
+        }).then(function () { tick(); });
+      } else {
+        fetch({{ url_for('api_alert_ack')|tojson }}, {
+          method: "POST", credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fingerprint: b.getAttribute("data-fp"),
+            title: b.getAttribute("data-title") || "",
+            origin: b.getAttribute("data-origin") || "",
+            path: b.getAttribute("data-path") || ""
+          })
+        }).then(function () { tick(); });
+      }
+    });
+  });
   syncAuto();
+  // Apply open-only filter on load via re-render if checked
+  if (filt && filt.checked) tick();
 })();
 </script>
 {% endblock %}

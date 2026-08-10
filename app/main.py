@@ -19,6 +19,7 @@ from .feeds import load_all_threat_lists
 from .iputil import load_networks
 from .fileio import write_text
 from .history import DEFAULT_MAX_EVENTS
+from .acks import AckStore
 from .parser import parse_line
 from .runtime import Runtime
 from .webui import start_web_server
@@ -150,6 +151,7 @@ def run(config_path: str) -> None:
     tailer = Tailer(directory, pattern, offsets, from_end)
 
     hist_max = int(cfg.get("history_max_events") or DEFAULT_MAX_EVENTS)
+    ack_path = cfg.get("acks_file") or os.environ.get("ACKS_FILE") or "/data/acks.json"
     runtime = Runtime(
         config_path=config_path,
         cfg=cfg,
@@ -160,6 +162,7 @@ def run(config_path: str) -> None:
         last_reload_at=time.time(),
         watching=f"{directory}/{pattern}",
         log_files=[os.path.basename(f) for f in list_log_files(directory, pattern)[-8:]],
+        acks=AckStore(ack_path),
     )
     runtime.history.set_max_events(hist_max)
     rt.RUNTIME = runtime
@@ -248,6 +251,9 @@ def run(config_path: str) -> None:
                 if not det or not alt:
                     break
                 for alert in det.process(event):
+                    # Reviewed findings: no re-notify / no new action items
+                    if runtime.acks.is_acked(alert.fingerprint):
+                        continue
                     if alt.send(alert, now):
                         runtime.note_alert(alert)
 
