@@ -10,12 +10,13 @@
   <Support>https://github.com/PaulG67/zoraxy-guard/issues</Support>
   <Project>https://github.com/PaulG67/zoraxy-guard</Project>
   <Overview>
-Zoraxy Guard – Security-Monitor für Zoraxy-Logs (Exploits, Threat-Listen, Brute-Force). Web-GUI auf Port 8787. Alarme: Discord, Telegram, Pushover.&#13;
+Zoraxy Guard – Security-Monitor für Zoraxy-Logs. Erkennt Exploit-Scans, Threat-Listen und Zugriffe mit Handlungsbedarf. Web-GUI auf Port 8787 (Status, History, Konfiguration). Alarme: Pushover, Discord, Telegram. Standard: nur Handlungsbedarf, keine 403-Scanner, keine bereits geprüften Alarme.&#13;
 &#13;
 SETUP (einmal im Unraid-Terminal):&#13;
 bash &lt;(curl -fsSL https://raw.githubusercontent.com/PaulG67/zoraxy-guard/main/unraid/install-template.sh)&#13;
 &#13;
-Das installiert diese Vorlage, legt appdata an und baut das Docker-Image lokal. Danach: Docker → Container hinzufügen → Template zoraxy-guard → Apply. GUI: http://TOWER:8787
+Danach: Docker → Container hinzufügen → Template zoraxy-guard → Apply. GUI: http://TOWER:8787&#13;
+Updates: Docker → Force Update (ghcr.io/paulg67/zoraxy-guard:latest).
   </Overview>
   <Category>Security: Network:Other Tools: Productivity:</Category>
   <WebUI>http://[IP]:[PORT:8787]/</WebUI>

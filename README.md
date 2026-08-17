@@ -1,16 +1,40 @@
 # Zoraxy Guard
 
-Monitors [Zoraxy](https://github.com/tobychui/zoraxy) reverse-proxy logs for exploits, threat-list IPs, bad user-agents, and auth anomalies.
+Security-Monitor für [Zoraxy](https://github.com/tobychui/zoraxy)-Logs: Exploit-Pfade, Threat-Listen, Scanner-Lärm und Zugriffe, bei denen wirklich **Handlung nötig** ist.
 
-**Web GUI:** port **8787** · Alerts: Discord, Telegram, Pushover, webhook
+<p align="center">
+  <img src="unraid/icon.png" alt="Zoraxy Guard" width="160" height="160">
+</p>
 
-Image tag: `ghcr.io/paulg67/zoraxy-guard:latest` (auto-build via GitHub Actions on push to `main`)
+**Web-GUI:** Port **8787** (Deutsch)  
+**Alarme:** Pushover, Discord, Telegram, Webhook  
+**Image:** `ghcr.io/paulg67/zoraxy-guard:latest` (GitHub Actions bei Push auf `main`)
 
-**Unraid updates:** Docker → zoraxy-guard → **Force update** (pull latest). No reinstall script needed once the image is published.
+---
 
-## Unraid – Vorlage (Docker → Container hinzufügen)
+## Funktionen
 
-### Einmal im Terminal
+- **Live-Tail** der Zoraxy-Logs (`zr_*.log`) ohne die History zu leeren
+- **Risiko-Engine:** Scanner/403/Redirects vs. mögliche Leaks (HTTP 2xx auf verdächtige Pfade)
+- **History:** gemeinsamer Memory-Ring (Status + History), Filter, Geo/ASN, Disk-Nachladen
+- **Prüfen ↗:** öffnet Domain + Pfad im Browser; der eigene Folgeaufruf erzeugt **keinen** Alarm
+- **Prüf-ID** (`ZG-…`) in Pushover und in der Web-UI — offene IDs per Dropdown oder eigene Eingabe als **geprüft** markieren
+- **Push-Filter:** nur Handlungsbedarf, keine geblockten 403, keine bereits geprüften Fingerprints (einstellbar)
+- Threat-Listen-Katalog, Allow-/Blocklist, sensible Hosts
+
+---
+
+## Unraid
+
+### Updates (bestehender Container)
+
+Docker → **zoraxy-guard** → **Force update** (zieht `ghcr.io/paulg67/zoraxy-guard:latest`).  
+Kein Script nötig, sobald das Image auf GHCR liegt.
+
+Icon der Vorlage: [unraid/icon.png](https://raw.githubusercontent.com/PaulG67/zoraxy-guard/main/unraid/icon.png)  
+Wenn Docker noch das alte Bild zeigt: Container **Edit → Apply**, Browser-Cache leeren.
+
+### Erstinstallation – einmal im Unraid-Terminal
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/PaulG67/zoraxy-guard/main/unraid/install-template.sh)
@@ -18,21 +42,21 @@ bash <(curl -fsSL https://raw.githubusercontent.com/PaulG67/zoraxy-guard/main/un
 
 Das Script:
 
-1. legt `appdata/zoraxy-guard` + `config.yaml` an  
-2. installiert die User-Vorlage nach  
+1. legt `appdata/zoraxy-guard` und `config.yaml` an  
+2. schreibt die User-Vorlage nach  
    `/boot/config/plugins/dockerMan/templates-user/my-zoraxy-guard.xml`  
-3. **baut das Docker-Image lokal** (damit „Container hinzufügen“ ohne GHCR-Login funktioniert)
+3. zieht das Image von GHCR (Fallback: lokaler Build)
 
-### Dann in der WebUI
+Danach in der Unraid-WebUI:
 
-1. **Docker → Container hinzufügen**  
-2. **Template** → **zoraxy-guard** wählen  
-3. Zoraxy-**Log-Pfad** prüfen (`…/zoraxy/log` mit `zr_*.log`)  
-4. Optional: `WEB_PASSWORD`, Pushover, Discord  
-5. **Apply**  
+1. **Docker → Container hinzufügen**
+2. **Template** → **zoraxy-guard**
+3. Zoraxy-**Log-Pfad** prüfen (`…/zoraxy/log` mit `zr_*.log`)
+4. Optional: `WEB_PASSWORD`, Pushover (`PUSHOVER_USER_KEY` + `PUSHOVER_API_TOKEN`)
+5. **Apply**
 6. GUI: `http://UNRAID-IP:8787`
 
-Updates: Script erneut ausführen (neues Image), Container neu erstellen/starten.
+Vorlage nach Icon-/XML-Änderung: Script erneut ausführen, dann Container **Edit → Apply**.
 
 ### Manuell ohne Script
 
@@ -46,26 +70,42 @@ curl -fsSL https://raw.githubusercontent.com/PaulG67/zoraxy-guard/main/config.ex
 curl -fsSL https://raw.githubusercontent.com/PaulG67/zoraxy-guard/main/unraid/my-zoraxy-guard.xml \
   -o /boot/config/plugins/dockerMan/templates-user/my-zoraxy-guard.xml
 
-git clone --depth 1 https://github.com/PaulG67/zoraxy-guard.git /mnt/user/appdata/zoraxy-guard-src
-docker build -t ghcr.io/paulg67/zoraxy-guard:latest /mnt/user/appdata/zoraxy-guard-src
+docker pull ghcr.io/paulg67/zoraxy-guard:latest
 ```
 
-## Web UI
+---
+
+## Web-UI
 
 | Seite | Funktion |
 |---|---|
-| Status | Zähler, Alarme, Test-Alert, Listen neu laden |
-| Konfiguration | Formular + YAML |
-| Listen | lokale Dateien + Katalog |
+| **Status** | Memory-Banner, letzte Alarme, Prüfen-Link, Prüf-ID (Auswahl + Eingabe), Test-Alarm |
+| **History** | Zugriffe im Ring, Filter (Erfolg/Fail, Handlungsbedarf, Lärm), Prüfen bei Handlungsbedarf, Reset & laden |
+| **Konfiguration** | Logs, Listen, Schwellwerte, **welche Alarme gepusht werden** |
+| **Listen** | lokale Blocklisten + Katalog-Update |
 
-`config.yaml` muss im Template **schreibbar** gemountet sein (GUI speichert dorthin).
+`config.yaml` muss **schreibbar** gemountet sein (GUI speichert dorthin).
 
-## Docker Compose (Alternative)
+### Alarme / Pushover
+
+Unter **Konfiguration → Alarme** (Standard):
+
+- nur **Handlungsbedarf** (kein 403-Scanner-Lärm)
+- geprüfte Fingerprints nicht erneut senden
+- geblockte 403/401/Blacklist nicht pushen
+
+In der Pushover-Nachricht stehen **Prüfen**-Link und **ID: ZG-…**.  
+Dieselbe ID in der Web-UI wählen oder eintippen → **Als geprüft markieren**.
+
+«Prüfen ↗» in Status/History: nächster Aufruf auf Domain+Pfad wird einmalig ignoriert (kein False-Positive durch dich selbst).
+
+---
+
+## Docker Compose
 
 ```yaml
 services:
   zoraxy-guard:
-    build: https://github.com/PaulG67/zoraxy-guard.git#main
     image: ghcr.io/paulg67/zoraxy-guard:latest
     container_name: zoraxy-guard
     restart: unless-stopped
@@ -80,9 +120,15 @@ services:
       - /mnt/user/appdata/zoraxy-guard/data:/data
 ```
 
-## Threat lists
+Env (optional): `DISCORD_WEBHOOK`, `PUSHOVER_USER_KEY` + `PUSHOVER_API_TOKEN`, `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`, `MIN_SEVERITY`
 
-| Name | Source |
+Beispiel-Config: [`config.example.yaml`](config.example.yaml)
+
+---
+
+## Threat-Listen
+
+| Name | Quelle |
 |---|---|
 | `ipsum-level3` / `4` / `5` | IPsum |
 | `spamhaus-drop` / `edrop` / `dropv6` | Spamhaus |
@@ -93,11 +139,9 @@ services:
 | `firehol-level1` / `2` | FireHOL |
 | `tor-exit-nodes` | Tor (laut) |
 
-Local files: `/data/lists/` · also `custom_lists` URLs in config.
+Lokale Dateien: `/data/lists/` · zusätzlich `custom_lists` in der Config.
 
-## Alerting
-
-Env: `DISCORD_WEBHOOK`, `PUSHOVER_USER_KEY` + `PUSHOVER_API_TOKEN`, `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`
+---
 
 ## License
 

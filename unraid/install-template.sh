@@ -58,4 +58,5 @@ echo "  4) WEB_PASSWORD setzen (empfohlen)"
 echo "  5) Apply / Erstellen"
 echo "  6) Web-GUI: http://UNRAID-IP:8787"
 echo
-echo "Bei Updates des Images dieses Script erneut ausführen, dann Container neu erstellen/start."
+echo "Bei Image-Updates: Docker → Force Update (ghcr.io/paulg67/zoraxy-guard:latest)."
+echo "Vorlage/Icon aktualisieren: dieses Script erneut, dann Container Edit → Apply."
