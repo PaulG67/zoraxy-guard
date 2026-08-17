@@ -21,6 +21,7 @@ class Alert:
     body: str
     fingerprint: str
     event: Optional[LogEvent] = None
+    kind: str = ""
 
 
 class Detector:
@@ -127,6 +128,7 @@ class Detector:
                     ),
                     fingerprint=f"blocklist:{client}",
                     event=event,
+                    kind="blocklist",
                 )
             )
 
@@ -140,6 +142,7 @@ class Detector:
                         body=f"{client} UA enthält «{fragment}»: {event.method} {path} on {origin or '-'} ({status})",
                         fingerprint=f"badua:{client}:{fragment}",
                         event=event,
+                        kind="bad_ua",
                     )
                 )
                 break
@@ -171,6 +174,7 @@ class Detector:
                         ),
                         fingerprint=f"exploit-ok:{client}:{path}",
                         event=event,
+                        kind="exploit_success",
                     )
                 )
             elif status in (301, 302, 303, 307, 308):
@@ -188,6 +192,7 @@ class Detector:
                             ),
                             fingerprint=f"exploit-scan-redirect:{client}",
                             event=event,
+                            kind="exploit_scan",
                         )
                     )
             elif n >= self.exploit_hits:
@@ -201,6 +206,7 @@ class Detector:
                         ),
                         fingerprint=f"exploit-scan:{client}",
                         event=event,
+                        kind="exploit_scan",
                     )
                 )
             elif status >= 400 or router in ("blacklist", "whitelist"):
@@ -211,6 +217,7 @@ class Detector:
                         body=f"{client} {event.method} {path} → {status} ({router}, {origin or '-'})",
                         fingerprint=f"exploit-probe:{client}:{path}",
                         event=event,
+                        kind="exploit_probe",
                     )
                 )
             else:
@@ -221,6 +228,7 @@ class Detector:
                         body=f"{client} {event.method} {path} → {status} ({router}, {origin or '-'}) — {verdict.title}",
                         fingerprint=f"exploit-probe:{client}:{path}",
                         event=event,
+                        kind="exploit_probe",
                     )
                 )
 
@@ -237,6 +245,7 @@ class Detector:
                         body=f"{client}: {n} Blocks/403 in {self.block_window}s (zuletzt {path} @ {origin or '-'})",
                         fingerprint=f"block-rate:{client}",
                         event=event,
+                        kind="block_rate",
                     )
                 )
 
@@ -254,6 +263,7 @@ class Detector:
                         body=f"{client} → {origin}: {n}× {status} in {self.auth_window}s (zuletzt {path})",
                         fingerprint=f"authfail:{key}",
                         event=event,
+                        kind="brute_force",
                     )
                 )
 
@@ -271,6 +281,7 @@ class Detector:
                         ),
                         fingerprint=f"sensitive-ok:{client}:{origin}",
                         event=event,
+                        kind="sensitive_ok",
                     )
                 )
 

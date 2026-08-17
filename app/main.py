@@ -251,10 +251,7 @@ def run(config_path: str) -> None:
                 if not det or not alt:
                     break
                 for alert in det.process(event):
-                    # Reviewed findings: no re-notify / no new action items
-                    if runtime.acks.is_acked(alert.fingerprint):
-                        continue
-                    if alt.send(alert, now):
+                    if alt.send(alert, now, acked=runtime.acks.is_acked(alert.fingerprint)):
                         runtime.note_alert(alert)
 
         save_counter += 1

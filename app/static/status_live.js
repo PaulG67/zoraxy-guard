@@ -74,7 +74,7 @@
     setText("stat-alerts", String(snap.alerts_sent || 0));
     setText("stat-memory", String((snap.memory && snap.memory.size) || 0));
     setText("stat-threats", String(snap.threat_networks || 0));
-    setText("stat-min-sev", "Min. Severity: " + (snap.min_severity || "medium"));
+    setText("stat-min-sev", "Push: " + (snap.notify_summary || ("ab " + (snap.min_severity || "medium"))));
     setText(
       "meta-detector-started",
       snap.started_at ? fmtTs(snap.started_at) + " (" + fmtUptime(snap.uptime_sec) + " uptime)" : "—"

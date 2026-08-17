@@ -108,6 +108,25 @@
 
   <section class="block">
     <h2>Alarme</h2>
+    <p class="hint">Steuert Pushover, Discord, Telegram und Webhook — nicht die History. Standard: nur Fälle mit Handlungsbedarf, keine geblockten 403-Scanner, keine bereits geprüften Fingerprints.</p>
+
+    <label>Wann senden?</label>
+    <div class="notify-modes">
+      {% set mode = cfg.get('alerts', {}).get('notify_mode', 'action') %}
+      <label class="check">
+        <input type="radio" name="notify_mode" value="action" {% if mode == 'action' %}checked{% endif %}>
+        <span>Nur Handlungsbedarf <small>HTTP 2xx auf verdächtige Pfade / mögliche Leaks. Kein Scanner-Lärm.</small></span>
+      </label>
+      <label class="check">
+        <input type="radio" name="notify_mode" value="action_watch" {% if mode == 'action_watch' %}checked{% endif %}>
+        <span>Handlungsbedarf und Beobachten <small>Zusätzlich z. B. Probe mit HTTP 5xx.</small></span>
+      </label>
+      <label class="check">
+        <input type="radio" name="notify_mode" value="severity" {% if mode == 'severity' %}checked{% endif %}>
+        <span>Nach Mindest-Severity (bisher) <small>Alle Detektor-Alarme ab der gewählten Stufe, sofern die Art unten aktiv ist.</small></span>
+      </label>
+    </div>
+
     <div class="row2">
       <div>
         <label>Min. Severity</label>
@@ -122,6 +141,29 @@
         <input type="number" name="cooldown_seconds" value="{{ cfg.get('alerts', {}).get('cooldown_seconds', 300) }}">
       </div>
     </div>
+
+    <label class="check" style="margin-top:10px;">
+      <input type="checkbox" name="notify_skip_acked" {% if cfg.get('alerts', {}).get('notify_skip_acked', true) %}checked{% endif %}>
+      <span>Bereits geprüfte Alarme nicht erneut senden <small>Fingerprint nach «Geprüft» bleibt stumm, bis du die Prüfung zurücknimmst.</small></span>
+    </label>
+    <label class="check" style="margin-top:8px;">
+      <input type="checkbox" name="notify_skip_blocked" {% if cfg.get('alerts', {}).get('notify_skip_blocked', true) %}checked{% endif %}>
+      <span>Geblockte Zugriffe nicht senden (403 / 401 / Blacklist) <small>Scanner, die Zoraxy bereits abweist, erzeugen keinen Push.</small></span>
+    </label>
+
+    <label style="margin-top:14px;">Alarm-Arten (Push)</label>
+    <p class="hint">Abgewählt = diese Art wird nie gepusht, unabhängig vom Filter oben. History bleibt vollständig.</p>
+    {% set saved_kinds = cfg.get('alerts', {}).get('notify_kinds') %}
+    {% set active_kinds = saved_kinds if saved_kinds is not none else notify_kind_ids %}
+    <div class="checks">
+      {% for kid, klabel, khint in notify_kinds %}
+      <label class="check">
+        <input type="checkbox" name="notify_kinds" value="{{ kid }}" {% if kid in active_kinds %}checked{% endif %}>
+        <span>{{ klabel }} <small>{{ khint }}</small></span>
+      </label>
+      {% endfor %}
+    </div>
+
     <label><input type="checkbox" name="stdout" {% if cfg.get('alerts', {}).get('stdout', true) %}checked{% endif %}> Auch ins Container-Log schreiben</label>
 
     <label>Discord Webhook</label>

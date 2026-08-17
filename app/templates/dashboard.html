@@ -34,7 +34,7 @@
   <div class="card">
     <div class="stat-label">Alarme gesendet</div>
     <div class="stat-value" id="stat-alerts">{{ snap.alerts_sent or 0 }}</div>
-    <div class="hint" id="stat-min-sev">Min. Severity: {{ snap.min_severity or 'medium' }}</div>
+    <div class="hint" id="stat-min-sev">Push: {{ snap.notify_summary or ('ab ' ~ (snap.min_severity or 'medium')) }}</div>
   </div>
   <div class="card">
     <div class="stat-label">Memory-Ring</div>

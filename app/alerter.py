@@ -6,7 +6,8 @@ from typing import Any, Dict
 import requests
 
 from .checkurl import build_check_url
-from .detectors import Alert, severity_at_least
+from .detectors import Alert
+from .notify import should_notify
 
 log = logging.getLogger("zoraxy-guard.alert")
 
@@ -25,6 +26,9 @@ SEVERITY_PRIORITY = {
 class Alerter:
     def __init__(self, cfg: dict, cooldowns: Dict[str, float]):
         a = cfg.get("alerts", {})
+        if not isinstance(a, dict):
+            a = {}
+        self.alerts_cfg = a
         self.min_severity = a.get("min_severity", "medium")
         self.cooldown = int(a.get("cooldown_seconds", 300))
         self.discord = (a.get("discord_webhook") or "").strip()
@@ -62,11 +66,12 @@ class Alerter:
         self.cooldowns[fingerprint] = now
         return False
 
-    def send(self, alert: Alert, now: float) -> bool:
-        if not severity_at_least(alert.severity, self.min_severity):
-            return False
-        if self._cooled(alert.fingerprint, now):
-            return False
+    def send(self, alert: Alert, now: float, *, force: bool = False, acked: bool = False) -> bool:
+        if not force:
+            if not should_notify(alert, self.alerts_cfg, acked=acked):
+                return False
+            if self._cooled(alert.fingerprint, now):
+                return False
 
         title = f"[Zoraxy Guard][{alert.severity.upper()}] {alert.title}"
         body = alert.body

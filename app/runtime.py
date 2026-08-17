@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, Deque, Dict, List, Optional
 
 from .acks import AckStore, DEFAULT_ACK_PATH
+from .notify import notify_summary
 from .alerter import Alerter
 from .detectors import Alert, Detector
 from .checkurl import build_check_url
@@ -254,9 +255,14 @@ class Runtime:
             alerts_sent = self.alerts_sent
             watching = self.watching
             try:
-                min_sev = str((self.cfg or {}).get("alerts", {}) or {}).get("min_severity") or "medium"
+                alerts_cfg = (self.cfg or {}).get("alerts") or {}
+                if not isinstance(alerts_cfg, dict):
+                    alerts_cfg = {}
+                min_sev = str(alerts_cfg.get("min_severity") or "medium")
+                notify_label = notify_summary(alerts_cfg)
             except Exception:
                 min_sev = "medium"
+                notify_label = "nur Handlungsbedarf"
 
         age_line = (now - last_line) if last_line else None
         if last_line and age_line is not None and age_line < 120:
@@ -299,6 +305,7 @@ class Runtime:
                 "last_line_at": last_line,
                 "alerts_sent": alerts_sent,
                 "min_severity": min_sev,
+                "notify_summary": notify_label,
                 "watching": watching,
             },
             "memory": {
@@ -364,6 +371,7 @@ class Runtime:
                 "config_path": self.config_path,
                 "history_buffer": self.history.buffer_info(),
                 "min_severity": mem["process"]["min_severity"],
+                "notify_summary": mem["process"].get("notify_summary") or "",
                 "acked_count": self.acks.count(),
             }
 

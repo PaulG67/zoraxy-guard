@@ -90,6 +90,20 @@ exploit_path_ignore: []
 alerts:
   cooldown_seconds: 300
   min_severity: medium
+  # Push-Filter: action | action_watch | severity
+  notify_mode: action
+  notify_skip_acked: true      # «Geprüft» nicht erneut senden
+  notify_skip_blocked: true    # 403/401/Blacklist nicht pushen
+  # Welche Detektor-Arten überhaupt auf die Kanäle dürfen:
+  notify_kinds:
+    - exploit_success
+    - exploit_scan
+    - exploit_probe
+    - blocklist
+    - block_rate
+    - brute_force
+    - bad_ua
+    - sensitive_ok
   # Prefer env vars DISCORD_WEBHOOK / TELEGRAM_* / PUSHOVER_* if set
   discord_webhook: ""
   telegram_bot_token: ""

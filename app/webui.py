@@ -24,6 +24,7 @@ from werkzeug.serving import make_server
 
 from . import runtime as rt
 from .detectors import Alert
+from .notify import DEFAULT_NOTIFY_KINDS, NOTIFY_KINDS, normalize_mode
 from .envconfig import apply_env_overrides
 from .fileio import write_text
 from .parser import LogEvent
@@ -298,6 +299,11 @@ def create_app(config_path: str) -> Flask:
 
                     a = disk["alerts"]
                     a["min_severity"] = request.form.get("min_severity", "medium").strip()
+                    a["notify_mode"] = normalize_mode(request.form.get("notify_mode", "action"))
+                    a["notify_skip_acked"] = request.form.get("notify_skip_acked") == "on"
+                    a["notify_skip_blocked"] = request.form.get("notify_skip_blocked") == "on"
+                    kinds = [k for k in request.form.getlist("notify_kinds") if k in DEFAULT_NOTIFY_KINDS]
+                    a["notify_kinds"] = kinds
                     try:
                         a["cooldown_seconds"] = int(request.form.get("cooldown_seconds") or 300)
                     except ValueError:
@@ -360,6 +366,8 @@ def create_app(config_path: str) -> Flask:
             catalog=catalog_as_feed_map(),
             enabled=set(enabled),
             as_text=_as_text,
+            notify_kinds=NOTIFY_KINDS,
+            notify_kind_ids=DEFAULT_NOTIFY_KINDS,
         )
 
     @app.route("/actions/reload-lists", methods=["POST"])
@@ -440,6 +448,7 @@ def create_app(config_path: str) -> Flask:
             title="Test-Alarm aus der Web-UI",
             body="Wenn du das siehst, funktioniert die Alarmierung (Pushover/Discord/Telegram).",
             fingerprint=f"ui-test:{time.time()}",
+            kind="test",
             event=LogEvent(
                 raw="[UI-TEST] simulated Zoraxy request line",
                 timestamp=None,
@@ -454,7 +463,7 @@ def create_app(config_path: str) -> Flask:
             ),
         )
         try:
-            if rt.RUNTIME.alerter.send(alert, time.time()):
+            if rt.RUNTIME.alerter.send(alert, time.time(), force=True):
                 rt.RUNTIME.note_alert(alert)
             flash("Test-Alarm gesendet (siehe Channels + Log).", "ok")
         except Exception as exc:
