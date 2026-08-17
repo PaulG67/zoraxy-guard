@@ -198,7 +198,8 @@
       var checkUrl = a.check_url || buildCheckUrl(origin, path);
       var checkLink = checkUrl
         ? '<a href="' + escHtml(checkUrl) + '" class="btn-check" target="_blank" rel="noopener noreferrer" ' +
-          'title="' + escHtml(checkUrl) + '" onclick="event.stopPropagation();">Prüfen ↗</a>'
+          'data-origin="' + escHtml(origin) + '" data-path="' + escHtml(path) + '" ' +
+          'title="' + escHtml(checkUrl) + '">Prüfen ↗</a>'
         : "";
       var statusBadge =
         status != null
@@ -250,6 +251,7 @@
         '<span class="sev ' + (a.severity || "") + '">' + (a.severity || "") + "</span>" +
         risk +
         '<span class="alert-title muted">' + escHtml(a.title || "") + "</span>" +
+        (a.review_id ? '<span class="alert-id mono" title="Prüf-ID">' + escHtml(a.review_id) + "</span>" : "") +
         "</div>" +
         '<div class="alert-target-row">' +
         '<span class="alert-origin mono" title="Ziel-Host">' + escHtml(origin || "—") + "</span>" +
@@ -335,6 +337,50 @@
       btn.disabled = false;
     }
   }
+
+  function wireAckById() {
+    var form = document.getElementById("ack-by-id-form");
+    if (!form || form.getAttribute("data-wired") === "1") return;
+    form.setAttribute("data-wired", "1");
+    form.addEventListener("submit", async function (ev) {
+      ev.preventDefault();
+      var input = document.getElementById("ack-id-input");
+      var msg = document.getElementById("ack-id-msg");
+      var btn = document.getElementById("ack-id-btn");
+      var rid = (input && input.value) || "";
+      if (!rid.trim()) {
+        if (msg) msg.textContent = "Bitte Prüf-ID aus der Pushover-Nachricht eintragen.";
+        return;
+      }
+      if (btn) btn.disabled = true;
+      try {
+        var res = await fetch("/api/alerts/ack", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({ review_id: rid.trim() }),
+        });
+        var data = await res.json().catch(function () { return {}; });
+        if (!res.ok) {
+          throw new Error(data.error || ("HTTP " + res.status));
+        }
+        if (input) input.value = "";
+        if (msg) {
+          msg.textContent =
+            "Geprüft: " + (data.review_id || rid.trim()) +
+            (data.ack && data.ack.title ? " — " + data.ack.title : "");
+        }
+        if (window.zoraxyGuardSoftRefresh) {
+          await window.zoraxyGuardSoftRefresh({ fullStatus: true, alerts: true });
+        }
+      } catch (e) {
+        if (msg) msg.textContent = "Nicht gefunden oder Fehler: " + e.message;
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    });
+  }
+  wireAckById();
 
   window.zoraxyGuardSoftRefresh = async function (opts) {
     opts = opts || {};

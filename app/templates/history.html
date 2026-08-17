@@ -347,6 +347,7 @@ function histExclusive(el, otherId) {
                   <th>Pfad</th>
                   <th>Status</th>
                   <th>Risiko</th>
+                  <th></th>
                   <th>Router</th>
                   <th>User-Agent</th>
                 </tr>
@@ -379,6 +380,13 @@ function histExclusive(el, otherId) {
                       {% if s.risk %}
                         <span class="risk-badge risk-{{ s.risk.level }}" title="{{ s.risk.detail }}">{{ s.risk.title }}</span>
                       {% else %}—{% endif %}
+                    </td>
+                    <td>
+                      {% if s.risk and s.risk.action_needed and s.check_url %}
+                        <a href="{{ s.check_url }}" class="btn-check btn-check-sm" target="_blank" rel="noopener noreferrer"
+                           data-origin="{{ s.origin or '' }}" data-path="{{ s.path or '/' }}"
+                           title="{{ s.check_url }}">Prüfen ↗</a>
+                      {% endif %}
                     </td>
                     <td class="muted mono">{{ s.router or '—' }}</td>
                     <td class="muted ua-cell" title="{{ s.ua }}">{{ s.ua or '—' }}</td>

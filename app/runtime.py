@@ -6,8 +6,9 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Deque, Dict, List, Optional
 
-from .acks import AckStore, DEFAULT_ACK_PATH
+from .acks import AckStore, DEFAULT_ACK_PATH, normalize_review_id, review_id
 from .notify import notify_summary
+from .selfcheck import CheckExpectStore
 from .alerter import Alerter
 from .detectors import Alert, Detector
 from .checkurl import build_check_url
@@ -94,6 +95,7 @@ def build_alert_record(alert: Alert, threats: Optional[ThreatLists] = None) -> d
         "Zeit (Log)": log_ts or "—",
         "Severity": alert.severity,
         "Fingerprint": alert.fingerprint,
+        "Prüf-ID": review_id(alert.fingerprint) or "—",
         "Risiko-Einschätzung": risk.title,
         "Handlung nötig?": "Ja" if risk.action_needed else "Nein (eher Scanner-Lärm / unbedenklich)",
         "Bewertung": risk.detail,
@@ -130,6 +132,7 @@ def build_alert_record(alert: Alert, threats: Optional[ThreatLists] = None) -> d
         "client_class": _ip_class(client),
         "risk": risk.as_dict(),
         "fingerprint": alert.fingerprint,
+        "review_id": review_id(alert.fingerprint),
         "acked": False,
         "check_url": build_check_url(origin, path),
         "details": details,
@@ -181,6 +184,7 @@ class Runtime:
         }
     )
     acks: AckStore = field(default_factory=lambda: AckStore(DEFAULT_ACK_PATH))
+    selfchecks: CheckExpectStore = field(default_factory=CheckExpectStore)
 
     def request_reload(self) -> None:
         with self.lock:
@@ -193,6 +197,13 @@ class Runtime:
     def note_alert(self, alert: Alert) -> None:
         record = build_alert_record(alert, self.threats)
         fp = alert.fingerprint
+        if fp:
+            self.acks.register_id(
+                fp,
+                title=alert.title,
+                origin=record.get("origin") or "",
+                path=record.get("path") or "",
+            )
         acked_meta = self.acks.get(fp) if fp else None
         if acked_meta:
             record["acked"] = True
@@ -236,6 +247,27 @@ class Runtime:
                         rec["details"]["Risiko-Einschätzung"] = "Geprüft"
                     found = True
         return found
+
+    def resolve_review_id(self, value: str) -> Optional[dict]:
+        """Find fingerprint + meta for a short Prüf-ID (ZG-…)."""
+        hit = self.acks.lookup_id(value)
+        if hit:
+            fp, meta = hit
+            return {"fingerprint": fp, **meta, "review_id": review_id(fp)}
+        rid = normalize_review_id(value)
+        if not rid:
+            return None
+        with self.lock:
+            for rec in self.recent_alerts:
+                if (rec.get("review_id") or review_id(rec.get("fingerprint") or "")) == rid:
+                    return {
+                        "fingerprint": rec.get("fingerprint") or "",
+                        "title": rec.get("title") or "",
+                        "origin": rec.get("origin") or "",
+                        "path": rec.get("path") or "",
+                        "review_id": rid,
+                    }
+        return None
 
     def is_alert_acked(self, fingerprint: str) -> bool:
         return self.acks.is_acked(fingerprint) if fingerprint else False
@@ -342,6 +374,8 @@ class Runtime:
             for rec in list(self.recent_alerts)[:50]:
                 r = dict(rec)
                 fp = r.get("fingerprint") or ""
+                if fp:
+                    r.setdefault("review_id", review_id(fp))
                 if fp and self.acks.is_acked(fp):
                     r["acked"] = True
                     meta = self.acks.get(fp) or {}

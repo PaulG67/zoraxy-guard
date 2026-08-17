@@ -25,6 +25,8 @@ from werkzeug.serving import make_server
 from . import runtime as rt
 from .detectors import Alert
 from .notify import DEFAULT_NOTIFY_KINDS, NOTIFY_KINDS, normalize_mode
+from .acks import review_id
+from .checkurl import build_check_url
 from .envconfig import apply_env_overrides
 from .fileio import write_text
 from .parser import LogEvent
@@ -137,15 +139,28 @@ def create_app(config_path: str) -> Flask:
         if request.form:
             data = {**data, **request.form.to_dict()}
         fp = (data.get("fingerprint") or "").strip()
+        rid_in = (data.get("review_id") or data.get("id") or "").strip()
+        resolved = None
+        if not fp and rid_in:
+            resolved = rt.RUNTIME.resolve_review_id(rid_in)
+            if not resolved or not resolved.get("fingerprint"):
+                return jsonify({"error": "unbekannte Prüf-ID", "review_id": rid_in}), 404
+            fp = resolved["fingerprint"]
         if not fp:
-            return jsonify({"error": "fingerprint fehlt"}), 400
+            return jsonify({"error": "fingerprint oder Prüf-ID fehlt"}), 400
         note = (data.get("note") or "").strip()
-        title = (data.get("title") or "").strip()
-        origin = (data.get("origin") or "").strip()
-        path = (data.get("path") or "").strip()
+        title = (data.get("title") or (resolved or {}).get("title") or "").strip()
+        origin = (data.get("origin") or (resolved or {}).get("origin") or "").strip()
+        path = (data.get("path") or (resolved or {}).get("path") or "").strip()
         entry = rt.RUNTIME.acks.ack(fp, title=title, origin=origin, path=path, note=note)
         rt.RUNTIME.mark_alert_acked(fp)
-        return jsonify({"ok": True, "fingerprint": fp, "ack": entry, "acked_count": rt.RUNTIME.acks.count()})
+        return jsonify({
+            "ok": True,
+            "fingerprint": fp,
+            "review_id": review_id(fp),
+            "ack": entry,
+            "acked_count": rt.RUNTIME.acks.count(),
+        })
 
     @app.route("/api/alerts/unack", methods=["POST"])
     @login_required
@@ -167,6 +182,23 @@ def create_app(config_path: str) -> Flask:
                     if rec.get("risk"):
                         rec["risk"] = dict(rec["risk"])
         return jsonify({"ok": ok, "fingerprint": fp, "acked_count": rt.RUNTIME.acks.count()})
+
+    @app.route("/api/checks/expect", methods=["POST"])
+    @login_required
+    def api_check_expect():
+        """Register origin+path so the next matching request is ignored (one shot)."""
+        if not rt.RUNTIME:
+            return jsonify({"error": "runtime not ready"}), 503
+        data = request.get_json(silent=True) or {}
+        if request.form:
+            data = {**data, **request.form.to_dict()}
+        origin = (data.get("origin") or "").strip()
+        path = (data.get("path") or "").strip() or "/"
+        url = build_check_url(origin, path)
+        if not url:
+            return jsonify({"error": "keine prüfbare URL"}), 400
+        pending = rt.RUNTIME.selfchecks.expect(origin, path)
+        return jsonify({"ok": True, "pending": pending, "check_url": url})
 
     @app.route("/history")
     @login_required

@@ -9,11 +9,13 @@
       {% endif %}
       {% if a.acked %}<span class="risk-badge risk-safe">Geprüft</span>{% endif %}
       <span class="alert-title muted">{{ a.title }}</span>
+      {% if a.review_id %}<span class="alert-id mono" title="Prüf-ID fürs Smartphone / Web">{{ a.review_id }}</span>{% endif %}
     </div>
     <div class="alert-target-row">
       <span class="alert-origin mono" title="Ziel-Host">{{ a.origin or '—' }}</span>
       {% if a.check_url %}
         <a href="{{ a.check_url }}" class="btn-check" target="_blank" rel="noopener noreferrer"
+           data-origin="{{ a.origin or '' }}" data-path="{{ a.path or '/' }}"
            title="{{ a.check_url }}" onclick="event.stopPropagation();">Prüfen ↗</a>
       {% endif %}
     </div>

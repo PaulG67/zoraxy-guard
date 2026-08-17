@@ -5,9 +5,11 @@ from typing import Any, Dict
 
 import requests
 
+from .acks import review_id
 from .checkurl import build_check_url
 from .detectors import Alert
 from .notify import should_notify
+from .selfcheck import append_check_marker
 
 log = logging.getLogger("zoraxy-guard.alert")
 
@@ -79,8 +81,24 @@ class Alerter:
             body = f"{body}\n\nLog: {alert.event.raw[:500]}"
 
         check_url = ""
+        rid = review_id(alert.fingerprint)
         if alert.event:
-            check_url = build_check_url(alert.event.origin, alert.event.path)
+            check_url = append_check_marker(build_check_url(alert.event.origin, alert.event.path))
+            if rid and check_url:
+                sep = "&" if "?" in check_url else "?"
+                check_url = f"{check_url}{sep}_zgid={rid[3:] if rid.startswith('ZG-') else rid}"
+
+        extra_bits = []
+        if rid:
+            extra_bits.append(f"ID: {rid}")
+        if check_url:
+            extra_bits.append(f"Prüfen: {check_url}")
+        if extra_bits:
+            suffix = "\n\n" + "\n".join(extra_bits)
+            if len(body) + len(suffix) <= 1024:
+                body = body + suffix
+            else:
+                body = body[: max(0, 1024 - len(suffix))] + suffix
 
         if self.stdout:
             log.warning("%s | %s", title, body.replace("\n", " | "))
@@ -136,12 +154,6 @@ class Alerter:
         priority = max(-2, min(2, int(priority)))
 
         message = body[:1024]
-        if check_url:
-            suffix = f"\n\nPrüfen: {check_url}"
-            if len(body) + len(suffix) <= 1024:
-                message = body + suffix
-            elif len(suffix) <= 1024:
-                message = body[: 1024 - len(suffix)] + suffix
 
         data: Dict[str, Any] = {
             "token": self.po_token,

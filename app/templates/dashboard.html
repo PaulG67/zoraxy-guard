@@ -139,6 +139,14 @@
 
 <div class="card" style="margin-top:14px">
   <h2>Letzte Alarme</h2>
+  <form id="ack-by-id-form" class="ack-by-id" action="#" onsubmit="return false;">
+    <label for="ack-id-input">Prüf-ID aus Pushover</label>
+    <div class="ack-by-id-row">
+      <input type="text" id="ack-id-input" name="review_id" placeholder="ZG-A1B2C3D4" autocomplete="off" spellcheck="false">
+      <button type="submit" class="primary" id="ack-id-btn">Als geprüft markieren</button>
+    </div>
+    <p class="hint" id="ack-id-msg">Nach der Prüfung am Smartphone die ID hier eintragen — gleicher Vorgang wie der Button «Geprüft».</p>
+  </form>
   <div class="soft-refresh-row" style="margin-bottom:10px;">
     <label class="hist-check" style="margin:0;">
       <input type="checkbox" id="filter-open-only" checked>

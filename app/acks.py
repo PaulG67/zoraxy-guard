@@ -2,17 +2,42 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import time
 from pathlib import Path
 from threading import Lock
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .fileio import write_text
 
 log = logging.getLogger("zoraxy-guard.acks")
 
 DEFAULT_ACK_PATH = "/data/acks.json"
+
+
+def review_id(fingerprint: str) -> str:
+    """Short stable ID for Pushover / Web (ZG-A1B2C3D4)."""
+    fp = (fingerprint or "").strip()
+    if not fp:
+        return ""
+    digest = hashlib.sha1(fp.encode("utf-8")).hexdigest()[:8].upper()
+    return f"ZG-{digest}"
+
+
+def normalize_review_id(value: str) -> str:
+    raw = (value or "").strip().upper().replace(" ", "")
+    if not raw:
+        return ""
+    raw = raw.replace("–", "-").replace("—", "-")
+    if raw.startswith("ZG"):
+        raw = raw[2:]
+        if raw.startswith("-"):
+            raw = raw[1:]
+    raw = "".join(ch for ch in raw if ch.isalnum())
+    if len(raw) < 6:
+        return ""
+    return f"ZG-{raw[:8]}"
 
 
 class AckStore:
@@ -22,12 +47,14 @@ class AckStore:
         self.path = path
         self._lock = Lock()
         self._acks: Dict[str, dict] = {}
+        self._ids: Dict[str, dict] = {}
         self.load()
 
     def load(self) -> None:
         p = Path(self.path)
         if not p.is_file():
             self._acks = {}
+            self._ids = {}
             return
         try:
             import json
@@ -36,23 +63,43 @@ class AckStore:
             raw = data.get("acks") if isinstance(data, dict) else data
             if not isinstance(raw, dict):
                 self._acks = {}
-                return
-            out: Dict[str, dict] = {}
-            for k, v in raw.items():
-                if isinstance(v, dict):
-                    out[str(k)] = v
-                else:
-                    out[str(k)] = {"ts": time.time(), "title": str(v)}
-            self._acks = out
+            else:
+                out: Dict[str, dict] = {}
+                for k, v in raw.items():
+                    if isinstance(v, dict):
+                        out[str(k)] = v
+                    else:
+                        out[str(k)] = {"ts": time.time(), "title": str(v)}
+                self._acks = out
+            ids_raw = data.get("ids") if isinstance(data, dict) else {}
+            ids_out: Dict[str, dict] = {}
+            if isinstance(ids_raw, dict):
+                for k, v in ids_raw.items():
+                    rid = normalize_review_id(str(k))
+                    if not rid:
+                        continue
+                    if isinstance(v, dict) and v.get("fingerprint"):
+                        ids_out[rid] = v
+                    elif isinstance(v, str) and v.strip():
+                        ids_out[rid] = {"fingerprint": v.strip()}
+            self._ids = ids_out
         except Exception as exc:
             log.warning("Could not load acks from %s: %s", self.path, exc)
             self._acks = {}
+            self._ids = {}
 
     def save(self) -> None:
         import json
 
         with self._lock:
-            text = json.dumps({"acks": self._acks}, indent=2, ensure_ascii=False) + "\n"
+            text = (
+                json.dumps(
+                    {"acks": self._acks, "ids": self._ids},
+                    indent=2,
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
         try:
             write_text(self.path, text)
         except Exception as exc:
@@ -67,6 +114,46 @@ class AckStore:
     def get(self, fingerprint: str) -> Optional[dict]:
         with self._lock:
             return dict(self._acks[fingerprint]) if fingerprint in self._acks else None
+
+    def register_id(
+        self,
+        fingerprint: str,
+        *,
+        title: str = "",
+        origin: str = "",
+        path: str = "",
+    ) -> str:
+        rid = review_id(fingerprint)
+        if not rid:
+            return ""
+        entry = {
+            "fingerprint": fingerprint,
+            "title": (title or "")[:200],
+            "origin": (origin or "")[:120],
+            "path": (path or "")[:200],
+            "ts": time.time(),
+        }
+        with self._lock:
+            self._ids[rid] = entry
+            if len(self._ids) > 2000:
+                ordered = sorted(self._ids.items(), key=lambda kv: kv[1].get("ts", 0))
+                for k, _ in ordered[: len(self._ids) - 2000]:
+                    self._ids.pop(k, None)
+        self.save()
+        return rid
+
+    def lookup_id(self, value: str) -> Optional[Tuple[str, dict]]:
+        rid = normalize_review_id(value)
+        if not rid:
+            return None
+        with self._lock:
+            meta = self._ids.get(rid)
+            if not meta:
+                return None
+            fp = str(meta.get("fingerprint") or "")
+            if not fp:
+                return None
+            return fp, dict(meta)
 
     def ack(
         self,
@@ -85,6 +172,7 @@ class AckStore:
             "origin": (origin or "")[:120],
             "path": (path or "")[:200],
             "note": (note or "")[:300],
+            "review_id": review_id(fingerprint),
         }
         with self._lock:
             self._acks[fingerprint] = entry
@@ -111,6 +199,7 @@ class AckStore:
         for fp, meta in items[:limit]:
             row = dict(meta)
             row["fingerprint"] = fp
+            row.setdefault("review_id", review_id(fp))
             out.append(row)
         return out
 

@@ -11,6 +11,8 @@ from typing import Any, Deque, DefaultDict, Optional, TYPE_CHECKING
 from .feeds import find_list_match
 from .iputil import parse_ip
 from .risk import assess_access
+from .selfcheck import SELF_CHECK_RISK, is_self_check_path
+from .checkurl import build_check_url
 
 if TYPE_CHECKING:
     from .feeds import ThreatLists
@@ -51,6 +53,7 @@ class AccessEvent:
     status: int
     router: str
     ua: str
+    self_check: bool = False
 
 
 def is_blocked(event: AccessEvent) -> bool:
@@ -119,11 +122,13 @@ class AccessHistory:
             self.max_events = max_events
             self._events = deque(items, maxlen=max_events)
 
-    def record(self, event: "LogEvent") -> None:
+    def record(self, event: "LogEvent", *, self_check: bool = False) -> None:
         if getattr(event, "kind", None) != "request":
             return
         path = (event.path or "")[:PATH_MAX] or "/"
         ua = (event.user_agent or "")[:UA_MAX]
+        if not self_check:
+            self_check = is_self_check_path(event.path or "")
         ts = time.time()
         if event.timestamp is not None:
             try:
@@ -139,6 +144,7 @@ class AccessHistory:
             status=int(event.status or 0),
             router=(event.router or "")[:48],
             ua=ua,
+            self_check=bool(self_check),
         )
         with self._lock:
             self._events.append(ev)
@@ -246,6 +252,8 @@ class AccessHistory:
             events = [e for e in events if is_failed(e)]
 
         def risk_for(e: AccessEvent, tl: Optional[str] = None) -> dict:
+            if getattr(e, "self_check", False):
+                return dict(SELF_CHECK_RISK)
             return assess_access(
                 path=e.path,
                 status=e.status,
@@ -347,6 +355,7 @@ class AccessHistory:
                         "geo": ginfo(e.client),
                         "threat_list": tl,
                         "risk": risk_for(e, tl),
+                        "check_url": build_check_url(e.origin, e.path),
                     }
                 )
 

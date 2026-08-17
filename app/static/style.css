@@ -204,6 +204,10 @@ th { color: var(--muted); font-weight: 600; font-size: 0.78rem; text-transform: 
   background: rgba(61, 156, 253, 0.22);
   text-decoration: none;
 }
+.btn-check-sm {
+  padding: 3px 8px;
+  font-size: 0.75rem;
+}
 .alert-request-row {
   display: flex;
   flex-wrap: wrap;
@@ -228,6 +232,43 @@ th { color: var(--muted); font-weight: 600; font-size: 0.78rem; text-transform: 
 .alert-check-url a { font-family: var(--mono); font-size: 0.82rem; }
 .alert-title { font-weight: 600; font-size: 0.88rem; }
 .alert-time { font-size: 0.82rem; }
+.alert-id {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  background: rgba(61, 156, 253, 0.12);
+  border: 1px solid rgba(61, 156, 253, 0.35);
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+.ack-by-id {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  background: #121820;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.ack-by-id label {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.ack-by-id-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.ack-by-id-row input[type="text"] {
+  flex: 1 1 160px;
+  min-width: 140px;
+  font-family: var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.ack-by-id #ack-id-msg { margin: 8px 0 0; }
 .alert-summary {
   font-size: 0.88rem;
   overflow: hidden;

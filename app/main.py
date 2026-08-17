@@ -246,8 +246,11 @@ def run(config_path: str) -> None:
                 hist = runtime.history
             for line in lines:
                 event = parse_line(line)
-                hist.record(event)
+                self_check = runtime.selfchecks.matches(event.origin, event.path)
+                hist.record(event, self_check=self_check)
                 hist.mark_live_ingress()
+                if self_check:
+                    continue
                 if not det or not alt:
                     break
                 for alert in det.process(event):
