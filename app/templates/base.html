@@ -4,13 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}{{ app_name }}{% endblock %}</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='icon.png') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon.png') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   {% block head %}{% endblock %}
 </head>
 <body>
   <div class="wrap">
     <header class="appbar">
-      <div class="brand">{{ app_name }} <span>Security monitor</span></div>
+      <div class="brand">
+        <img src="{{ url_for('static', filename='icon.png') }}" alt="" class="brand-icon" width="36" height="36">
+        {{ app_name }} <span>Security monitor</span>
+      </div>
       <nav>
         <a href="{{ url_for('dashboard') }}" class="{% if request.endpoint == 'dashboard' %}active{% endif %}">Status</a>
         <a href="{{ url_for('history_page') }}" class="{% if request.endpoint == 'history_page' %}active{% endif %}">History</a>

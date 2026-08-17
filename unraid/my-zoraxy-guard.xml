@@ -20,7 +20,7 @@ Das installiert diese Vorlage, legt appdata an und baut das Docker-Image lokal. 
   <Category>Security: Network:Other Tools: Productivity:</Category>
   <WebUI>http://[IP]:[PORT:8787]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/PaulG67/zoraxy-guard/main/unraid/my-zoraxy-guard.xml</TemplateURL>
-  <Icon>https://raw.githubusercontent.com/tobychui/zoraxy/main/src/web/img/logo.svg</Icon>
+  <Icon>https://raw.githubusercontent.com/PaulG67/zoraxy-guard/main/unraid/icon.png</Icon>
   <ExtraParams/>
   <PostArgs/>
   <CPUset/>

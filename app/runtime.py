@@ -388,6 +388,33 @@ class Runtime:
                 else:
                     r.setdefault("acked", False)
                 recent.append(r)
+            open_ids = []
+            seen_ids = set()
+            for r in recent:
+                if r.get("acked"):
+                    continue
+                rid = r.get("review_id") or review_id(r.get("fingerprint") or "")
+                if not rid or rid in seen_ids:
+                    continue
+                risk = r.get("risk") or {}
+                if risk.get("title") == "Geprüft":
+                    continue
+                seen_ids.add(rid)
+                origin = (r.get("origin") or "").strip()
+                path = (r.get("path") or "/").strip() or "/"
+                title = (r.get("title") or "").strip()
+                path_short = path if len(path) <= 42 else path[:39] + "…"
+                loc = f"{origin}{path_short}" if origin else title or path_short
+                open_ids.append(
+                    {
+                        "id": rid,
+                        "label": f"{rid}  ·  {loc}",
+                        "title": title,
+                        "origin": origin,
+                        "path": path,
+                        "severity": r.get("severity") or "",
+                    }
+                )
             return {
                 **mem,
                 "started_at": mem["process"]["started_at"],
@@ -407,6 +434,7 @@ class Runtime:
                 "min_severity": mem["process"]["min_severity"],
                 "notify_summary": mem["process"].get("notify_summary") or "",
                 "acked_count": self.acks.count(),
+                "open_review_ids": open_ids,
             }
 
 

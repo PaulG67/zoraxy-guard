@@ -38,11 +38,20 @@ header.appbar {
   border-bottom: 1px solid var(--border);
 }
 .brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-weight: 700;
   letter-spacing: 0.02em;
   font-size: 1.15rem;
 }
-.brand span { color: var(--muted); font-weight: 500; font-size: 0.85rem; margin-left: 8px; }
+.brand-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  flex-shrink: 0;
+}
+.brand span { color: var(--muted); font-weight: 500; font-size: 0.85rem; margin-left: 2px; }
 nav { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; }
 nav a { color: var(--muted); font-size: 0.95rem; }
 nav a.active, nav a:hover { color: var(--text); }
@@ -261,6 +270,11 @@ th { color: var(--muted); font-weight: 600; font-size: 0.78rem; text-transform: 
   gap: 8px;
   align-items: center;
 }
+.ack-by-id-row select {
+  flex: 1 1 280px;
+  min-width: 220px;
+  max-width: 100%;
+}
 .ack-by-id-row input[type="text"] {
   flex: 1 1 160px;
   min-width: 140px;
@@ -268,6 +282,7 @@ th { color: var(--muted); font-weight: 600; font-size: 0.78rem; text-transform: 
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
+.ack-by-id-row input[hidden] { display: none !important; }
 .ack-by-id #ack-id-msg { margin: 8px 0 0; }
 .alert-summary {
   font-size: 0.88rem;

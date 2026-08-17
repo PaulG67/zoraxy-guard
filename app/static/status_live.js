@@ -338,18 +338,61 @@
     }
   }
 
+  function fillOpenReviewIds(items) {
+    var sel = document.getElementById("ack-id-select");
+    if (!sel) return;
+    var prev = sel.value;
+    var html = '<option value="">— Offene ID wählen —</option>';
+    (items || []).forEach(function (it) {
+      var id = it.id || "";
+      if (!id) return;
+      html += '<option value="' + escHtml(id) + '">' + escHtml(it.label || id) + "</option>";
+    });
+    html += '<option value="__custom__">Eigene Eingabe…</option>';
+    sel.innerHTML = html;
+    var keep = false;
+    for (var i = 0; i < sel.options.length; i++) {
+      if (sel.options[i].value === prev) {
+        keep = true;
+        break;
+      }
+    }
+    sel.value = keep ? prev : "";
+    syncAckIdCustom();
+  }
+
+  function syncAckIdCustom() {
+    var sel = document.getElementById("ack-id-select");
+    var input = document.getElementById("ack-id-input");
+    if (!sel || !input) return;
+    var custom = sel.value === "__custom__";
+    input.hidden = !custom;
+    if (custom) input.focus();
+  }
+
+  function selectedReviewId() {
+    var sel = document.getElementById("ack-id-select");
+    var input = document.getElementById("ack-id-input");
+    var fromSel = sel ? sel.value : "";
+    if (fromSel && fromSel !== "__custom__") return fromSel.trim();
+    return ((input && input.value) || "").trim();
+  }
+
   function wireAckById() {
     var form = document.getElementById("ack-by-id-form");
     if (!form || form.getAttribute("data-wired") === "1") return;
     form.setAttribute("data-wired", "1");
+    var sel = document.getElementById("ack-id-select");
+    if (sel) sel.addEventListener("change", syncAckIdCustom);
+    syncAckIdCustom();
     form.addEventListener("submit", async function (ev) {
       ev.preventDefault();
       var input = document.getElementById("ack-id-input");
       var msg = document.getElementById("ack-id-msg");
       var btn = document.getElementById("ack-id-btn");
-      var rid = (input && input.value) || "";
-      if (!rid.trim()) {
-        if (msg) msg.textContent = "Bitte Prüf-ID aus der Pushover-Nachricht eintragen.";
+      var rid = selectedReviewId();
+      if (!rid) {
+        if (msg) msg.textContent = "Bitte eine offene ID wählen oder eine eigene eingeben.";
         return;
       }
       if (btn) btn.disabled = true;
@@ -358,16 +401,18 @@
           method: "POST",
           credentials: "same-origin",
           headers: { "Content-Type": "application/json", Accept: "application/json" },
-          body: JSON.stringify({ review_id: rid.trim() }),
+          body: JSON.stringify({ review_id: rid }),
         });
         var data = await res.json().catch(function () { return {}; });
         if (!res.ok) {
           throw new Error(data.error || ("HTTP " + res.status));
         }
         if (input) input.value = "";
+        if (sel) sel.value = "";
+        syncAckIdCustom();
         if (msg) {
           msg.textContent =
-            "Geprüft: " + (data.review_id || rid.trim()) +
+            "Geprüft: " + (data.review_id || rid) +
             (data.ack && data.ack.title ? " — " + data.ack.title : "");
         }
         if (window.zoraxyGuardSoftRefresh) {
@@ -399,6 +444,7 @@
       if (opts.fullStatus !== false && document.getElementById("stat-lines")) {
         applyStatusStats(snap);
         if (opts.alerts !== false) renderAlerts(snap.recent_alerts || []);
+        fillOpenReviewIds(snap.open_review_ids || []);
       }
       var stamp = document.getElementById("soft-refresh-stamp");
       if (stamp && !document.getElementById("stat-lines")) {
