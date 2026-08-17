@@ -9,6 +9,7 @@ from typing import Any, Deque, Dict, List, Optional
 from .acks import AckStore, DEFAULT_ACK_PATH
 from .alerter import Alerter
 from .detectors import Alert, Detector
+from .checkurl import build_check_url
 from .feeds import ThreatLists, find_list_match
 from .history import AccessHistory, DEFAULT_MAX_EVENTS
 from .geoip import GeoCache
@@ -129,6 +130,7 @@ def build_alert_record(alert: Alert, threats: Optional[ThreatLists] = None) -> d
         "risk": risk.as_dict(),
         "fingerprint": alert.fingerprint,
         "acked": False,
+        "check_url": build_check_url(origin, path),
         "details": details,
         "raw": raw[:900],
     }

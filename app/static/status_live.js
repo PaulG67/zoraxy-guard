@@ -121,6 +121,37 @@
     setText("soft-refresh-stamp", "Anzeige aktualisiert: " + fmtTs(snap.now || Date.now() / 1000) + " (Memory unverändert auf dem Server)");
   }
 
+  function buildCheckUrl(origin, path) {
+    origin = (origin || "").trim().replace(/\.$/, "");
+    path = (path || "").trim();
+    if (!origin || origin === "-") return "";
+    var scheme = "https://";
+    var host = origin;
+    if (/^https?:\/\//i.test(origin)) {
+      try {
+        var u = new URL(origin);
+        scheme = u.protocol + "//";
+        host = u.host;
+        if (u.pathname && u.pathname !== "/") {
+          path = u.pathname + (path && path.charAt(0) === "/" ? path : (path ? "/" + path : ""));
+        }
+      } catch (e) {
+        host = origin.replace(/^https?:\/\//i, "");
+      }
+    }
+    if (!path) path = "/";
+    else if (path.charAt(0) !== "/") path = "/" + path;
+    return scheme + host + path;
+  }
+
+  function escHtml(s) {
+    return String(s || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
   function renderAlerts(list) {
     var box = document.getElementById("alerts-live");
     if (!box) return;
@@ -159,14 +190,28 @@
       if (acked) {
         risk += ' <span class="risk-badge risk-safe">Geprüft</span>';
       }
+      var origin = a.origin || "";
+      var path = a.path || "/";
+      var method = a.method || "";
+      var status = a.status;
+      var client = a.client || "";
+      var checkUrl = a.check_url || buildCheckUrl(origin, path);
+      var checkLink = checkUrl
+        ? '<a href="' + escHtml(checkUrl) + '" class="btn-check" target="_blank" rel="noopener noreferrer" ' +
+          'title="' + escHtml(checkUrl) + '" onclick="event.stopPropagation();">Prüfen ↗</a>'
+        : "";
+      var statusBadge =
+        status != null
+          ? '<span class="st-badge st-' + Math.floor(status / 100) + '">HTTP ' + status + "</span>"
+          : "";
       var rows = "";
       if (a.details) {
         Object.keys(a.details).forEach(function (k) {
           var val = a.details[k];
           if (k === "Log-Zeile") {
-            rows += "<tr><th>" + k + '</th><td><code class="logline">' + String(val) + "</code></td></tr>";
+            rows += "<tr><th>" + k + '</th><td><code class="logline">' + escHtml(val) + "</code></td></tr>";
           } else {
-            rows += "<tr><th>" + k + "</th><td>" + String(val) + "</td></tr>";
+            rows += "<tr><th>" + k + "</th><td>" + escHtml(val) + "</td></tr>";
           }
         });
       }
@@ -186,22 +231,39 @@
             '" data-title="' +
             encodeURIComponent(a.title || "") +
             '" data-origin="' +
-            encodeURIComponent(a.origin || "") +
+            encodeURIComponent(origin) +
             '" data-path="' +
-            encodeURIComponent(a.path || "") +
+            encodeURIComponent(path) +
             '">Geprüft</button>' +
-            '<span class="hint">Markiert diesen Vorgang als erledigt (keine erneuten Alerts mit diesem Fingerprint).</span></div>';
+            '<span class="hint">Markiert als erledigt (kein erneuter Alert mit diesem Fingerprint).</span></div>';
         }
       }
+      var checkUrlBlock = checkUrl
+        ? '<div class="alert-check-url"><span class="muted">Prüf-URL:</span> ' +
+          '<a href="' + escHtml(checkUrl) + '" target="_blank" rel="noopener noreferrer">' +
+          escHtml(checkUrl) + "</a></div>"
+        : "";
       html +=
         '<details class="alert-item' + (acked ? " alert-acked" : "") + '"><summary>' +
-        '<span class="muted mono">' + fmtTs(a.ts) + "</span>" +
+        '<div class="alert-summary-top">' +
+        '<span class="muted mono alert-time">' + fmtTs(a.ts) + "</span>" +
         '<span class="sev ' + (a.severity || "") + '">' + (a.severity || "") + "</span>" +
         risk +
-        '<span class="alert-title">' + (a.title || "") + "</span>" +
-        '<span class="muted alert-summary">' + (a.summary || a.body || "") + "</span>" +
+        '<span class="alert-title muted">' + escHtml(a.title || "") + "</span>" +
+        "</div>" +
+        '<div class="alert-target-row">' +
+        '<span class="alert-origin mono" title="Ziel-Host">' + escHtml(origin || "—") + "</span>" +
+        checkLink +
+        "</div>" +
+        '<div class="alert-request-row mono">' +
+        (method ? '<span class="alert-method">' + escHtml(method) + "</span>" : "") +
+        '<span class="alert-path" title="' + escHtml(path) + '">' + escHtml(path) + "</span>" +
+        statusBadge +
+        (client ? '<span class="muted">von ' + escHtml(client) + "</span>" : "") +
+        "</div>" +
         "</summary><div class=\"alert-detail\">" +
-        (rows ? '<table class="detail-table"><tbody>' + rows + "</tbody></table>" : "<p class=\"muted\">" + (a.body || "") + "</p>") +
+        checkUrlBlock +
+        (rows ? '<table class="detail-table"><tbody>' + rows + "</tbody></table>" : "<p class=\"muted\">" + escHtml(a.body || "") + "</p>") +
         actions +
         "</div></details>";
     });

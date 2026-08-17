@@ -150,48 +150,7 @@
   {% if snap.recent_alerts %}
   <div class="alert-list">
     {% for a in snap.recent_alerts %}
-    <details class="alert-item {% if a.acked %}alert-acked{% endif %}" data-fp="{{ a.fingerprint or '' }}" data-acked="{{ 1 if a.acked else 0 }}">
-      <summary>
-        <span class="muted mono">{{ time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(a.ts)) if a.ts else '—' }}</span>
-        <span class="sev {{ a.severity }}">{{ a.severity }}</span>
-        {% if a.risk %}
-          <span class="risk-badge risk-{{ a.risk.level }}" title="{{ a.risk.detail }}">{{ a.risk.title }}</span>
-        {% endif %}
-        {% if a.acked %}<span class="risk-badge risk-safe">Geprüft</span>{% endif %}
-        <span class="alert-title">{{ a.title }}</span>
-        <span class="muted alert-summary">{{ a.summary or a.body }}</span>
-      </summary>
-      <div class="alert-detail">
-        {% if a.details %}
-        <table class="detail-table">
-          <tbody>
-            {% for key, val in a.details.items() %}
-            <tr>
-              <th>{{ key }}</th>
-              <td>{% if key == 'Log-Zeile' %}<code class="logline">{{ val }}</code>{% else %}{{ val }}{% endif %}</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-        {% else %}
-        <p class="muted">{{ a.body }}</p>
-        {% endif %}
-        {% if a.fingerprint %}
-        <div class="alert-actions">
-          {% if a.acked %}
-            <button type="button" class="btn-ack-undo" data-fp="{{ a.fingerprint|e }}">Prüfung zurücknehmen</button>
-          {% else %}
-            <button type="button" class="primary btn-ack"
-                    data-fp="{{ a.fingerprint|e }}"
-                    data-title="{{ (a.title or '')|e }}"
-                    data-origin="{{ (a.origin or '')|e }}"
-                    data-path="{{ (a.path or '')|e }}">Geprüft</button>
-            <span class="hint">Vorgang erledigt — keine erneuten Alerts mit diesem Fingerprint.</span>
-          {% endif %}
-        </div>
-        {% endif %}
-      </div>
-    </details>
+      {% include 'partials/alert_item.html' %}
     {% endfor %}
   </div>
   {% else %}
