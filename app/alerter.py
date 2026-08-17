@@ -5,6 +5,7 @@ from typing import Any, Dict
 
 import requests
 
+from .checkurl import build_check_url
 from .detectors import Alert, severity_at_least
 
 log = logging.getLogger("zoraxy-guard.alert")
@@ -72,6 +73,10 @@ class Alerter:
         if alert.event and alert.event.raw:
             body = f"{body}\n\nLog: {alert.event.raw[:500]}"
 
+        check_url = ""
+        if alert.event:
+            check_url = build_check_url(alert.event.origin, alert.event.path)
+
         if self.stdout:
             log.warning("%s | %s", title, body.replace("\n", " | "))
 
@@ -80,7 +85,7 @@ class Alerter:
         if self.tg_token and self.tg_chat:
             self._telegram(title, body)
         if self.po_user and self.po_token:
-            self._pushover(title, body, alert.severity)
+            self._pushover(title, body, alert.severity, check_url)
         if self.generic:
             self._generic(title, body, alert)
         return True
@@ -120,18 +125,29 @@ class Alerter:
         except Exception as exc:
             log.error("Telegram send failed: %s", exc)
 
-    def _pushover(self, title: str, body: str, severity: str) -> None:
+    def _pushover(self, title: str, body: str, severity: str, check_url: str = "") -> None:
         priority = self.po_priority_map.get(severity, 0)
         # Keep within Pushover limits
         priority = max(-2, min(2, int(priority)))
+
+        message = body[:1024]
+        if check_url:
+            suffix = f"\n\nPrüfen: {check_url}"
+            if len(body) + len(suffix) <= 1024:
+                message = body + suffix
+            elif len(suffix) <= 1024:
+                message = body[: 1024 - len(suffix)] + suffix
 
         data: Dict[str, Any] = {
             "token": self.po_token,
             "user": self.po_user,
             "title": title[:250],
-            "message": body[:1024],
+            "message": message,
             "priority": priority,
         }
+        if check_url:
+            data["url"] = check_url[:512]
+            data["url_title"] = "Prüfen"
         if self.po_device:
             data["device"] = self.po_device
         if self.po_sound:
