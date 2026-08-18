@@ -39,9 +39,10 @@ class Field:
 
     name: str
     yaml_path: str
-    kind: str  # text | password | bool | select | list | ip_cidr_list
+    kind: str  # text | password | bool | select | list | ip_cidr_list | ips_cidrs | profile_duration
     label: str
     hint: str = ""
+    help: str = ""
     options: Tuple[str, ...] = ()
     keep_if_empty: bool = False
     default: Any = None
@@ -55,6 +56,7 @@ class YamlDoc:
     title: str
     hint: str
     restart: str
+    help: str = ""
     relpath: str = ""  # under config_dir; unused for bouncer
     bouncer: bool = False
     create_if_missing: bool = False
@@ -91,44 +93,42 @@ DOCUMENTS: Tuple[YamlDoc, ...] = (
                 "api_key",
                 "password",
                 "API-Key",
-                "cscli bouncers add zoraxy-bouncer — leer lassen, um den vorhandenen Key zu behalten.",
                 keep_if_empty=True,
                 default="",
+                help="Von CrowdSec: cscli bouncers add zoraxy-bouncer. Leer lassen behält den gespeicherten Key.",
             ),
             Field(
                 "agent_url",
                 "agent_url",
                 "text",
                 "CrowdSec LAPI (agent_url)",
-                "Aus dem Guard-/Zoraxy-Container erreichbar, z. B. http://crowdsec:8080",
                 default="http://crowdsec:8080",
+                help="URL der Local API aus Sicht von Zoraxy, z. B. http://crowdsec:8080.",
             ),
             Field(
                 "log_level",
                 "log_level",
                 "select",
                 "Log-Level",
-                "info oder debug, sonst fehlen die Block-Zeilen im Reiter Auswertung.",
                 options=LOG_LEVELS,
                 default="info",
+                help="warning unterdrückt Block-Zeilen. Für die Auswertung info oder debug.",
             ),
             Field(
                 "cloudflare",
                 "is_proxied_behind_cloudflare",
                 "bool",
                 "Hinter Cloudflare (echte Client-IP)",
-                "Setzen, wenn Zoraxy hinter Cloudflare sitzt.",
                 default=False,
+                help="Echte Besucher-IP statt Cloudflare-Edge, wenn Zoraxy hinter Cloudflare sitzt.",
             ),
         ),
     ),
     YamlDoc(
         id="engine",
         title="CrowdSec Engine (config.yaml)",
-        hint=(
-            "Nur ausgewählte Schlüssel — unbekannte Abschnitte bleiben erhalten. "
-            "Formular-Speichern entfernt YAML-Kommentare (Backup .bak)."
-        ),
+        hint="Zentrale Engine: Logs, LAPI, Community-Listen, Prometheus, DB.",
+        help="Nur bekannte Schlüssel werden gesetzt. Community-Blocklists kommen über die Central API.",
         restart="Danach CrowdSec-Container neu starten.",
         relpath="config.yaml",
         create_if_missing=False,
@@ -138,33 +138,107 @@ DOCUMENTS: Tuple[YamlDoc, ...] = (
                 "common.log_level",
                 "select",
                 "Log-Level",
-                "",
                 options=LOG_LEVELS,
                 default="info",
+                help="Wie ausführlich CrowdSec selbst loggt (nicht der Zoraxy-Bouncer).",
+            ),
+            Field(
+                "log_media",
+                "common.log_media",
+                "select",
+                "Log-Ziel",
+                options=("stdout", "file", "syslog"),
+                default="stdout",
+                help="Im Docker meist stdout. file schreibt nach log_dir.",
             ),
             Field(
                 "listen_uri",
                 "api.server.listen_uri",
                 "text",
                 "LAPI listen_uri",
-                "Im Docker oft 0.0.0.0:8080, damit der Bouncer verbinden kann.",
                 default="0.0.0.0:8080",
+                help="Im Docker 0.0.0.0:8080, damit der Bouncer von außen verbindet.",
             ),
             Field(
                 "forwarded_for",
                 "api.server.use_forwarded_for_headers",
                 "bool",
                 "X-Forwarded-For auswerten",
-                "Nur mit vertrauenswürdigem Proxy und trusted_ips.",
                 default=False,
+                help="Nur hinter einem vertrauenswürdigen Proxy und mit Trusted IPs.",
             ),
             Field(
                 "trusted_ips",
                 "api.server.trusted_ips",
                 "list",
                 "Trusted IPs / CIDRs",
-                "Eine pro Zeile. IPs, denen Forwarded-For bzw. Admin-API erlaubt ist.",
                 default=["127.0.0.1", "::1"],
+                help="Diese Netze dürfen die Admin-API nutzen bzw. Forwarded-For setzen.",
+            ),
+            Field(
+                "capi_sharing",
+                "api.server.online_client.sharing",
+                "bool",
+                "Signale an die Community senden",
+                default=True,
+                help="Lokale Detections anonymisiert an die CrowdSec Central API.",
+            ),
+            Field(
+                "capi_community",
+                "api.server.online_client.pull.community",
+                "bool",
+                "Community-Blocklist beziehen",
+                default=True,
+                help="Gemeinschafts-Liste böser IPs. Der Zoraxy-Bouncer blockt sie mit 403.",
+            ),
+            Field(
+                "capi_blocklists",
+                "api.server.online_client.pull.blocklists",
+                "bool",
+                "Console-Blocklists beziehen",
+                default=True,
+                help="Zusätzliche Listen aus der CrowdSec Console, sobald die Instanz enrolled ist.",
+            ),
+            Field(
+                "usage_metrics",
+                "api.server.disable_usage_metrics_export",
+                "bool",
+                "Nutzungsmetriken nicht senden",
+                default=False,
+                help="Wenn gesetzt, keine anonymen Nutzungsstatistiken an CrowdSec.",
+            ),
+            Field(
+                "prometheus",
+                "prometheus.enabled",
+                "bool",
+                "Prometheus-Metriken",
+                default=True,
+                help="Metriken für Grafana. Standard-Port 6060.",
+            ),
+            Field(
+                "prom_level",
+                "prometheus.level",
+                "select",
+                "Prometheus-Detail",
+                options=("full", "aggregated"),
+                default="full",
+                help="full = alle Series, aggregated = weniger Cardinality.",
+            ),
+            Field(
+                "db_max_items",
+                "db_config.flush.max_items",
+                "text",
+                "DB: max. Alerts",
+                default="5000",
+                help="Ältere Alerts werden gelöscht, sobald diese Zahl überschritten ist.",
+            ),
+            Field(
+                "db_max_age",
+                "db_config.flush.max_age",
+                "text",
+                "DB: max. Alter",
+                default="7d",
+                help="Alerts älter als dieser Zeitraum (7d, 48h, …) werden entfernt.",
             ),
         ),
     ),
@@ -185,12 +259,21 @@ DOCUMENTS: Tuple[YamlDoc, ...] = (
         },
         fields=(
             Field(
+                "source",
+                "source",
+                "select",
+                "Quelle",
+                options=("file", "syslog", "journalctl", "docker"),
+                default="file",
+                help="file = Dateien/Globs. syslog = Netz-Empfang. journalctl = systemd. docker = Container-Logs.",
+            ),
+            Field(
                 "filenames",
                 "filenames",
                 "list",
                 "Log-Dateien / Globs",
-                "Eine pro Zeile. Muss im CrowdSec-Container existieren.",
                 default=["/var/log/zoraxy/*.log"],
+                help="Eine pro Zeile. Pfad im CrowdSec-Container, nicht Guard /logs.",
             ),
             Field(
                 "log_type",
@@ -235,44 +318,121 @@ DOCUMENTS: Tuple[YamlDoc, ...] = (
         ),
     ),
     YamlDoc(
+        id="capi_wl",
+        title="CAPI-Whitelist",
+        hint="IPs, die trotz Community-/Console-Blocklist nicht gebannt werden.",
+        help="capi_whitelists.yaml wirkt gegen bezogene CAPI-Listen. Neuere CrowdSec-Versionen nutzen zusätzlich Console-Allowlists.",
+        restart="Danach CrowdSec-Container neu starten.",
+        relpath="capi_whitelists.yaml",
+        create_if_missing=True,
+        defaults={"ips": [], "cidrs": []},
+        fields=(
+            Field(
+                "entries",
+                "ips",
+                "ips_cidrs",
+                "IPs und CIDRs",
+                default=[],
+                help="Eine pro Zeile. Mit / als CIDR. z. B. VPN-Ausgang, der sonst auf der Community-Liste landet.",
+            ),
+        ),
+    ),
+    YamlDoc(
+        id="simulation",
+        title="Simulation",
+        hint="Alerts erzeugen, aber keine Ban-Decisions — zum Testen.",
+        help="Global an = nichts bannen. Einzelne Scenarios stellst du unter «Scenarios / Ban» stumm.",
+        restart="Danach CrowdSec-Container neu starten.",
+        relpath="simulation.yaml",
+        create_if_missing=True,
+        defaults={"simulation": False},
+        fields=(
+            Field(
+                "simulation",
+                "simulation",
+                "bool",
+                "Alles nur simulieren (kein Ban)",
+                default=False,
+                help="CrowdSec erkennt weiter, der Bouncer bekommt aber keine Ban-Decisions.",
+            ),
+        ),
+    ),
+    YamlDoc(
         id="console",
-        title="Console / Sharing",
-        hint="Welche Entscheidungen mit der CrowdSec Console geteilt werden.",
+        title="CrowdSec Console",
+        hint="Was mit app.crowdsec.net geteilt und von dort gesteuert wird.",
+        help="Enrollment (cscli console enroll) bleibt im CrowdSec-Container.",
         restart="Danach CrowdSec-Container neu starten.",
         relpath="console.yaml",
-        create_if_missing=False,
+        create_if_missing=True,
+        defaults={
+            "share_manual_decisions": False,
+            "share_custom": True,
+            "share_tainted": True,
+            "share_context": False,
+            "console_management": False,
+        },
         fields=(
+            Field(
+                "console_management",
+                "console_management",
+                "bool",
+                "Decisions von der Console erlauben",
+                default=False,
+                help="Die Web-Console darf Bans setzen oder löschen (nur enrolled).",
+            ),
             Field(
                 "share_manual",
                 "share_manual_decisions",
                 "bool",
                 "Manuelle Entscheidungen teilen",
                 default=False,
+                help="Von Hand gesetzte Bans an Console/Community.",
             ),
             Field(
                 "share_tainted",
                 "share_tainted",
                 "bool",
                 "Tainted Scenarios teilen",
-                default=False,
+                default=True,
+                help="Detections aus veränderten Hub-Scenarios teilen.",
             ),
             Field(
                 "share_custom",
                 "share_custom",
                 "bool",
                 "Eigene Scenarios teilen",
+                default=True,
+                help="Detections aus selbst geschriebenen Scenarios teilen.",
+            ),
+            Field(
+                "share_context",
+                "share_context",
+                "bool",
+                "Alert-Kontext teilen",
                 default=False,
+                help="Zusätzliche Alert-Felder an die Console — kann Details enthalten.",
             ),
         ),
     ),
     YamlDoc(
         id="profiles",
         title="Profile (Ban-Dauer)",
-        hint="Komplexe YAML — vorerst nur Raw-Editor. Später Felder für default_duration.",
+        hint="Wie lange eine gebannte IP gesperrt bleibt (erstes Profil).",
+        help="Das Formular ändert die duration der ersten Ban-Decision. Weitere Profile im Raw-YAML.",
         restart="Danach CrowdSec-Container neu starten.",
         relpath="profiles.yaml",
         create_if_missing=False,
-        raw_only=True,
+        fields=(
+            Field(
+                "duration",
+                "duration",
+                "profile_duration",
+                "Standard-Ban-Dauer",
+                default="4h",
+                help="z. B. 4h, 24h, 168h. Gilt für das erste Profil mit Ban-Decision.",
+            ),
+        ),
     ),
 )
 
@@ -420,12 +580,81 @@ def _apply_ip_cidr(data: dict, entries: Sequence[str]) -> None:
     data.setdefault("filter", "true")
 
 
+def _ips_cidrs_from_data(data: dict) -> List[str]:
+    ips = list(data.get("ips") or data.get("ip") or [])
+    cidrs = list(data.get("cidrs") or data.get("cidr") or [])
+    return [str(x) for x in ips] + [str(x) for x in cidrs]
+
+
+def _apply_ips_cidrs(data: dict, entries: Sequence[str]) -> None:
+    ips: List[str] = []
+    cidrs: List[str] = []
+    for item in entries:
+        (cidrs if "/" in item else ips).append(item)
+    data["ips"] = ips
+    data["cidrs"] = cidrs
+
+
+def _load_yaml_docs(path: Path) -> List[Any]:
+    text = path.read_text(encoding="utf-8")
+    docs = [d for d in yaml.safe_load_all(text) if d is not None]
+    return docs
+
+
+def _profiles_duration(docs: Sequence[Any]) -> str:
+    for d in docs:
+        items = d if isinstance(d, list) else [d]
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            for dec in item.get("decisions") or []:
+                if isinstance(dec, dict) and dec.get("duration"):
+                    return str(dec["duration"])
+    return "4h"
+
+
+def _set_profiles_duration(docs: List[Any], duration: str) -> List[Any]:
+    duration = (duration or "4h").strip() or "4h"
+    patched = False
+    out: List[Any] = []
+    for d in docs:
+        if patched:
+            out.append(d)
+            continue
+        if isinstance(d, list):
+            for item in d:
+                if patched or not isinstance(item, dict):
+                    continue
+                for dec in item.get("decisions") or []:
+                    if isinstance(dec, dict) and "duration" in dec:
+                        dec["duration"] = duration
+                        patched = True
+                        break
+            out.append(d)
+            continue
+        if isinstance(d, dict):
+            for dec in d.get("decisions") or []:
+                if isinstance(dec, dict) and ("duration" in dec or dec.get("type") == "ban"):
+                    dec["duration"] = duration
+                    patched = True
+                    break
+        out.append(d)
+    return out
+
+
+def _dump_yaml_docs(docs: Sequence[Any]) -> str:
+    chunks = [dump_yaml(d).rstrip() for d in docs]
+    return "\n---\n".join(chunks) + "\n"
+
+
 def apply_fields(doc: YamlDoc, data: dict, form: dict) -> dict:
     """Patch known fields onto an existing mapping; unknown keys stay."""
     if not isinstance(data, dict):
         data = {}
     for fld in doc.fields:
         raw = form.get(fld.name)
+        if fld.kind == "profile_duration":
+            continue
         if fld.kind == "bool":
             # checkbox: missing means false
             _nested_set(data, fld.yaml_path, raw in ("on", "true", "1", "yes", True))
@@ -438,6 +667,9 @@ def apply_fields(doc: YamlDoc, data: dict, form: dict) -> dict:
         if fld.kind == "ip_cidr_list":
             _apply_ip_cidr(data, parse_list(str(raw or "")))
             continue
+        if fld.kind == "ips_cidrs":
+            _apply_ips_cidrs(data, parse_list(str(raw or "")))
+            continue
         if fld.kind == "select":
             val = str(raw or "").strip() or str(fld.default or "")
             if fld.options and val not in fld.options:
@@ -445,6 +677,12 @@ def apply_fields(doc: YamlDoc, data: dict, form: dict) -> dict:
             _nested_set(data, fld.yaml_path, val)
             continue
         text = "" if raw is None else str(raw).strip()
+        if fld.name in ("db_max_items",):
+            try:
+                _nested_set(data, fld.yaml_path, int(text or fld.default or 0))
+                continue
+            except ValueError:
+                pass
         _nested_set(data, fld.yaml_path, text)
     return data
 
@@ -525,6 +763,8 @@ def save_document_form(cfg: Optional[dict], doc_id: str, form: dict) -> Tuple[bo
     path = document_path(cfg, doc)
     if not allowed_write_path(cfg, path):
         return False, f"Pfad nicht erlaubt: {path}"
+    if doc.id == "profiles":
+        return save_profiles_duration(cfg, str(form.get("duration") or "4h"))
     root = Path(config_dir(cfg)) if not doc.bouncer else None
     data: dict = {}
     if path.is_file():
@@ -553,6 +793,22 @@ def save_document_form(cfg: Optional[dict], doc_id: str, form: dict) -> Tuple[bo
     except OSError as exc:
         return False, f"Speichern fehlgeschlagen: {exc}"
     return True, f"{doc.title} gespeichert. {doc.restart}"
+
+
+def save_profiles_duration(cfg: Optional[dict], duration: str) -> Tuple[bool, str]:
+    path = Path(config_dir(cfg)) / "profiles.yaml"
+    if not path.is_file():
+        return False, f"profiles.yaml nicht gefunden: {path}"
+    if not allowed_write_path(cfg, path):
+        return False, f"Pfad nicht erlaubt: {path}"
+    try:
+        docs = _load_yaml_docs(path)
+        docs = _set_profiles_duration(docs, duration)
+        _backup(path)
+        write_text(str(path), _dump_yaml_docs(docs))
+    except OSError as exc:
+        return False, f"Speichern fehlgeschlagen: {exc}"
+    return True, "Ban-Dauer gespeichert. CrowdSec-Container neu starten."
 
 
 def save_document_raw(cfg: Optional[dict], doc_id: str, text: str) -> Tuple[bool, str]:
@@ -617,10 +873,14 @@ def _normalize_rel(rel: str) -> str:
 
 
 def field_value(doc: YamlDoc, fld: Field, data: Any) -> Any:
+    if fld.kind == "profile_duration":
+        return None
     if not isinstance(data, dict):
         data = {}
     if fld.kind == "ip_cidr_list":
         return _ip_cidr_from_whitelist(data)
+    if fld.kind == "ips_cidrs":
+        return _ips_cidrs_from_data(data)
     val = _nested_get(data, fld.yaml_path)
     if val is None:
         return fld.default
@@ -637,9 +897,14 @@ def document_view(cfg: Optional[dict], doc: YamlDoc) -> dict:
     mapping = False
     if path.is_file():
         try:
-            data = load_yaml(path)
             yaml_text = path.read_text(encoding="utf-8")
-            mapping = isinstance(data, dict)
+            if doc.id == "profiles":
+                docs = _load_yaml_docs(path)
+                data = docs[0] if docs else {}
+                mapping = True
+            else:
+                data = load_yaml(path)
+                mapping = isinstance(data, dict)
         except Exception as exc:
             load_error = str(exc)
             data = None
@@ -650,15 +915,18 @@ def document_view(cfg: Optional[dict], doc: YamlDoc) -> dict:
 
     fields_out = []
     for fld in doc.fields:
-        val = field_value(doc, fld, data if isinstance(data, dict) else {})
-        if fld.kind in ("list", "ip_cidr_list"):
-            shown = list_as_text(val)
-        elif fld.kind == "bool":
-            shown = _as_bool(val)
-        elif fld.kind == "password":
-            shown = "" if fld.keep_if_empty else ("" if val is None else str(val))
+        if fld.kind == "profile_duration":
+            shown = _profiles_duration(_load_yaml_docs(path)) if path.is_file() else str(fld.default or "4h")
         else:
-            shown = "" if val is None else str(val)
+            val = field_value(doc, fld, data if isinstance(data, dict) else {})
+            if fld.kind in ("list", "ip_cidr_list", "ips_cidrs"):
+                shown = list_as_text(val)
+            elif fld.kind == "bool":
+                shown = _as_bool(val)
+            elif fld.kind == "password":
+                shown = "" if fld.keep_if_empty else ("" if val is None else str(val))
+            else:
+                shown = "" if val is None else str(val)
         options = list(fld.options)
         if fld.kind == "select" and shown and shown not in options:
             options = [shown] + options
@@ -672,6 +940,7 @@ def document_view(cfg: Optional[dict], doc: YamlDoc) -> dict:
                 "kind": fld.kind,
                 "label": fld.label,
                 "hint": fld.hint,
+                "help": fld.help,
                 "value": shown,
                 "options": options,
                 "secret_set": secret_set,
@@ -682,6 +951,7 @@ def document_view(cfg: Optional[dict], doc: YamlDoc) -> dict:
         "id": doc.id,
         "title": doc.title,
         "hint": doc.hint,
+        "help": doc.help,
         "restart": doc.restart,
         "raw_only": doc.raw_only or (data is not None and not mapping and not load_error),
         "create_if_missing": doc.create_if_missing,
@@ -716,7 +986,7 @@ def list_collections(cfg: Optional[dict]) -> List[dict]:
     return items
 
 
-def _iter_yaml_under(root: Path, *, max_files: int = 80) -> Iterable[Path]:
+def _iter_yaml_under(root: Path, *, max_files: int = 150) -> Iterable[Path]:
     if not root.is_dir():
         return
     skip_dirs = {".git", "hub", "data", "__pycache__"}
@@ -783,12 +1053,15 @@ def extra_file_view(cfg: Optional[dict], rel: str) -> Optional[dict]:
 
 
 def setup_context(cfg: Optional[dict], extra_rel: str = "") -> dict:
+    from . import cshub
+
     docs = [document_view(cfg, d) for d in DOCUMENTS]
     extra_files = list_extra_files(cfg)
     chosen = extra_rel or (extra_files[0]["rel"] if extra_files else "")
     extra = extra_file_view(cfg, chosen) if chosen else None
     cdir = Path(config_dir(cfg))
     bpath = Path(bouncer_config(cfg))
+    hub = cshub.hub_view(cfg)
     return {
         "config_dir": str(cdir),
         "bouncer_config": str(bpath),
@@ -796,6 +1069,7 @@ def setup_context(cfg: Optional[dict], extra_rel: str = "") -> dict:
         "bouncer_status": path_status(bpath, create=True),
         "documents": docs,
         "collections": list_collections(cfg),
+        "hub": hub,
         "extra_files": extra_files,
         "extra": extra,
     }

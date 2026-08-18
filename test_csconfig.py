@@ -149,6 +149,88 @@ def test_missing_mount_not_fatal(tmp_path: Path):
     assert not ok
 
 
+def test_engine_capi_fields_and_help():
+    doc = csconfig.get_doc("engine")
+    names = {f.name for f in doc.fields}
+    assert "capi_community" in names
+    assert "capi_blocklists" in names
+    assert any(f.help for f in doc.fields)
+    data = {"common": {"log_level": "info"}, "keep": True}
+    csconfig.apply_fields(
+        doc,
+        data,
+        {
+            "log_level": "debug",
+            "capi_community": "on",
+            "capi_blocklists": "",
+            "capi_sharing": "on",
+            "listen_uri": "0.0.0.0:8080",
+            "db_max_items": "8000",
+            "db_max_age": "14d",
+        },
+    )
+    assert data["keep"] is True
+    assert data["api"]["server"]["online_client"]["pull"]["community"] is True
+    assert data["api"]["server"]["online_client"]["pull"]["blocklists"] is False
+    assert data["db_config"]["flush"]["max_items"] == 8000
+
+
+def test_capi_whitelist_and_profiles(tmp_path: Path):
+    csdir = tmp_path / "crowdsec"
+    csdir.mkdir()
+    cfg = {"crowdsec": {"config_dir": str(csdir), "bouncer_config": str(tmp_path / "b.yaml")}}
+    ok, msg = csconfig.save_document_form(cfg, "capi_wl", {"entries": "9.9.9.9\n8.8.8.0/24"})
+    assert ok, msg
+    loaded = csconfig.load_yaml(csdir / "capi_whitelists.yaml")
+    assert loaded["ips"] == ["9.9.9.9"]
+    assert loaded["cidrs"] == ["8.8.8.0/24"]
+
+    (csdir / "profiles.yaml").write_text(
+        "name: default_ip_remediation\n"
+        "decisions:\n  - type: ban\n    duration: 4h\non_success: break\n",
+        encoding="utf-8",
+    )
+    ok, msg = csconfig.save_document_form(cfg, "profiles", {"duration": "24h"})
+    assert ok, msg
+    docs = csconfig._load_yaml_docs(csdir / "profiles.yaml")
+    assert csconfig._profiles_duration(docs) == "24h"
+
+
+def test_hub_collections_and_simulation(tmp_path: Path):
+    from app import cshub
+
+    csdir = tmp_path / "crowdsec"
+    (csdir / "collections").mkdir(parents=True)
+    (csdir / "scenarios").mkdir()
+    (csdir / "hub" / "collections").mkdir(parents=True)
+    cfg = {"crowdsec": {"config_dir": str(csdir), "bouncer_config": str(tmp_path / "b.yaml")}}
+    (csdir / "collections" / "linux.yaml").write_text("name: crowdsecurity/linux\n", encoding="utf-8")
+    (csdir / "scenarios" / "http-probing.yaml").write_text(
+        "name: crowdsecurity/http-probing\ndescription: probe\n",
+        encoding="utf-8",
+    )
+    (csdir / "hub" / ".index.json").write_text(
+        '{"collections": {"crowdsecurity/http-cve": {"path": "collections/http-cve.yaml", "description": "cves"}}}',
+        encoding="utf-8",
+    )
+    (csdir / "hub" / "collections" / "http-cve.yaml").write_text(
+        "name: crowdsecurity/http-cve\nparsers: []\nscenarios: []\n",
+        encoding="utf-8",
+    )
+    view = cshub.collections_view(cfg)
+    ids = [r["id"] for r in view["rows"]]
+    assert "crowdsecurity/linux" in ids
+    linux = next(r for r in view["rows"] if r["id"] == "crowdsecurity/linux")
+    assert linux["installed"]
+    ok, msg = cshub.install_collections(cfg, ["crowdsecurity/http-cve"])
+    assert ok, msg
+    assert (csdir / "collections" / "http-cve.yaml").is_file()
+    ok, msg = cshub.save_simulation(cfg, global_simulation=False, ban_enabled=[])
+    assert ok, msg
+    sim = cshub.load_simulation(cfg)
+    assert "crowdsecurity/http-probing" in sim["exclusions"]
+
+
 if __name__ == "__main__":
     from tempfile import TemporaryDirectory
 
@@ -160,4 +242,7 @@ if __name__ == "__main__":
         test_path_safety(root / "safe")
         test_save_form_and_raw(root / "work")
         test_missing_mount_not_fatal(root / "miss")
+        test_capi_whitelist_and_profiles(root / "wl")
+        test_hub_collections_and_simulation(root / "hub")
+    test_engine_capi_fields_and_help()
     print("csconfig tests ok")

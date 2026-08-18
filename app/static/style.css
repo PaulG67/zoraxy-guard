@@ -376,6 +376,42 @@ textarea.yaml-sm { min-height: 220px; font-family: var(--mono); font-size: 0.85r
 .file-list { margin: 8px 0 0; padding-left: 1.2rem; }
 .file-list li { margin: 4px 0; }
 .cs-extra-pick { margin-bottom: 12px; }
+.cs-lab { display: inline-flex; align-items: center; gap: 6px; }
+.cs-help { position: relative; display: inline-flex; align-items: center; vertical-align: middle; }
+.cs-help-btn {
+  width: 1.35rem;
+  height: 1.35rem;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #243145;
+  color: var(--text);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.cs-help-btn:hover { filter: brightness(1.12); border-color: var(--accent); color: var(--accent); }
+.cs-help-tip {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  top: calc(100% + 6px);
+  min-width: 220px;
+  max-width: 340px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #121820;
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 400;
+  line-height: 1.45;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  white-space: normal;
+}
+label .cs-help-tip { left: auto; right: 0; }
 .login-box { max-width: 380px; margin: 12vh auto; }
 .hint { font-size: 0.82rem; color: var(--muted); margin-top: 6px; }
 section.block { margin-bottom: 18px; }

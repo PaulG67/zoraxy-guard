@@ -11,27 +11,36 @@
 
 {% if view == 'setup' %}
   {% set setup = setup %}
+  {% set hub = setup.hub or {} %}
+  {% macro help_btn(text) -%}
+    {%- if text -%}
+    <span class="cs-help">
+      <button type="button" class="cs-help-btn" title="Hilfe" aria-label="Hilfe">?</button>
+      <span class="cs-help-tip" hidden>{{ text }}</span>
+    </span>
+    {%- endif -%}
+  {%- endmacro %}
 
   <section class="block">
-    <h2 style="margin:0 0 6px;font-size:1.15rem;">CrowdSec YAML</h2>
+    <h2 style="margin:0 0 6px;font-size:1.15rem;">CrowdSec YAML
+      {{ help_btn('Mit gemountetem CrowdSec-Ordner liest und schreibt Guard die Engine-YAML. Collections kommen aus dem lokalen Hub (hub/.index.json) oder per cscli. Nach jedem Speichern den CrowdSec- bzw. Zoraxy-Container neu starten.') }}
+    </h2>
     <p class="hint" style="margin-top:0;">
-      Wichtige Dateien über die Web-Oberfläche anpassen. Neue Felder/Dateien können später in der Registry ergänzt werden.
-      Guard spricht nicht mit <code>cscli</code> — Collections installieren bleibt im CrowdSec-Container.
-      Nach dem Speichern den jeweiligen Container neu starten.
+      Listen wie unter Konfiguration: Collections anhaken und speichern (kopiert aus dem lokalen Hub).
+      Community-Blocklist unter Engine. Einzelne Scenarios ohne Ban unter «Scenarios / Ban».
     </p>
   </section>
 
   <form method="post" class="card" action="{{ url_for('crowdsec_page') }}">
     <input type="hidden" name="action" value="paths">
-    <h2>Pfade im Guard-Container</h2>
+    <h2>Pfade im Guard-Container {{ help_btn('Diese Pfade gelten im Guard-Container. Unraid mappt Host-Ordner darauf. Bouncer ist ein Ordner mit config.yaml, nicht die Datei allein.') }}</h2>
     <p class="hint">
-      In Unraid die Vorlage-Pfade setzen: CrowdSec-<code>/etc/crowdsec</code> →
-      <code>{{ setup.config_dir }}</code>, Bouncer-<strong>Ordner</strong> (mit <code>config.yaml</code>) →
-      <code>/crowdsec-bouncer</code> (Datei <code>{{ setup.bouncer_config }}</code>).
+      CrowdSec <code>/etc/crowdsec</code> → <code>{{ setup.config_dir }}</code>,
+      Bouncer-Ordner → <code>/crowdsec-bouncer</code> (Datei <code>{{ setup.bouncer_config }}</code>).
     </p>
     <div class="row2">
       <div>
-        <label>CrowdSec-Config-Ordner</label>
+        <label>CrowdSec-Config-Ordner {{ help_btn('Typisch /mnt/user/appdata/crowdsec oder …/crowdsec/config auf dem Host.') }}</label>
         <input type="text" name="config_dir" value="{{ setup.config_dir }}" autocomplete="off">
         {% if setup.config_dir_status.exists %}
           <span class="path-pill ok">Ordner da</span>
@@ -40,7 +49,7 @@
         {% endif %}
       </div>
       <div>
-        <label>Bouncer YAML</label>
+        <label>Bouncer YAML {{ help_btn('Vollständiger Pfad zur Plugin-config.yaml im Guard-Container.') }}</label>
         <input type="text" name="bouncer_config" value="{{ setup.bouncer_config }}" autocomplete="off">
         {% if setup.bouncer_status.is_file %}
           <span class="path-pill ok">Datei da</span>
@@ -54,10 +63,78 @@
     </div>
   </form>
 
+  <section class="block card" id="cs-listen">
+    <h2>Collections (Hub-Listen)
+      {{ help_btn('Eine Collection ist ein Bündel aus Parsern und Scenarios. CrowdSec akzeptiert nur Hub-Namen (crowdsecurity/…). Haken + Speichern kopiert fehlende Pakete aus hub/ in collections/parsers/scenarios. Deinstallieren: cscli collections remove im CrowdSec-Container. Community-IPs schaltest du unter Engine «Community-Blocklist».') }}
+    </h2>
+    <p class="hint">
+      Wie «Bekannte Threat-Datenbanken» unter Konfiguration — nur für CrowdSec.
+      {% if not (hub.collections and hub.collections.index_present) %}
+        Kein <code>hub/.index.json</code> — Installieren aus dem Hub geht erst nach <code>cscli hub update</code> im CrowdSec-Container (oder Hub-Ordner mit mounten).
+      {% endif %}
+    </p>
+    <form method="post" action="{{ url_for('crowdsec_page') }}">
+      <input type="hidden" name="action" value="collections">
+      <div class="checks">
+        {% for c in (hub.collections.rows if hub.collections else []) %}
+          <label class="check {% if not c.recommended and not c.installed %}muted{% endif %}">
+            <input type="checkbox" name="collection" value="{{ c.id }}"
+              {% if c.installed %}checked{% endif %}>
+            <span>
+              <code>{{ c.id }}</code>
+              {% if c.installed %}<small class="sev high">installiert</small>{% elif c.installable %}<small>aus Hub kopierbar</small>{% else %}<small>cscli nötig</small>{% endif %}
+              {{ help_btn(c.description) }}
+              <small>{{ c.title }}{% if c.description %} · {{ c.description }}{% endif %}</small>
+            </span>
+          </label>
+        {% else %}
+          <p class="muted">Keine Collections (Config-Ordner mounten).</p>
+        {% endfor %}
+      </div>
+      <div class="actions">
+        <button class="primary" type="submit">Gewählte Collections einbinden</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="block card" id="cs-scenarios">
+    <h2>Scenarios / Ban
+      {{ help_btn('Jedes Scenario erkennt ein Angriffsmuster. Haken = Ban-Decision (Bouncer 403). Ohne Haken steht es in simulation.yaml exclusions: erkannt, aber nicht gebannt. Global simulieren ist ein Extra-Haken.') }}
+    </h2>
+    {% set sc = hub.scenarios or {} %}
+    <form method="post" action="{{ url_for('crowdsec_page') }}">
+      <input type="hidden" name="action" value="scenarios">
+      <label>
+        <input type="checkbox" name="global_simulation" {% if sc.global_simulation %}checked{% endif %}>
+        Alles nur simulieren (kein Ban)
+        {{ help_btn('Entspricht simulation.yaml simulation: true. Der Bouncer bekommt dann gar keine Bans.') }}
+      </label>
+      {% if sc.rows %}
+        <div class="checks" style="margin-top:12px">
+          {% for s in sc.rows %}
+            <label class="check">
+              <input type="checkbox" name="scenario_ban" value="{{ s.name }}" {% if s.ban %}checked{% endif %}>
+              <span>
+                <code>{{ s.name }}</code>
+                {{ help_btn(s.description or 'Hub-Scenario. Unhaken = nur simulieren, nicht bannen.') }}
+                {% if s.description %}<small>{{ s.description }}</small>{% endif %}
+              </span>
+            </label>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p class="muted">Keine scenarios/*.yaml (Ordner nicht gemountet oder leer).</p>
+      {% endif %}
+      <div class="actions">
+        <button class="primary" type="submit">Scenarios speichern</button>
+      </div>
+    </form>
+  </section>
+
   {% for doc in setup.documents %}
     <section class="block card cs-doc" id="doc-{{ doc.id }}">
       <div class="cs-doc-head">
-        <h2>{{ doc.title }}</h2>
+        <h2>{{ doc.title }} {{ help_btn(doc.help or doc.hint) }}</h2>
         <div class="cs-pills">
           {% if doc.is_file %}
             <span class="path-pill ok">vorhanden</span>
@@ -88,26 +165,25 @@
               {% if f.kind == 'bool' %}
                 <label>
                   <input type="checkbox" name="{{ f.name }}" {% if f.value %}checked{% endif %}>
-                  {{ f.label }}
+                  {{ f.label }} {{ help_btn(f.help or f.hint) }}
                 </label>
               {% elif f.kind == 'select' %}
-                <label>{{ f.label }}</label>
+                <label>{{ f.label }} {{ help_btn(f.help or f.hint) }}</label>
                 <select name="{{ f.name }}">
                   {% for opt in f.options %}
                     <option value="{{ opt }}" {% if f.value == opt %}selected{% endif %}>{{ opt }}</option>
                   {% endfor %}
                 </select>
               {% elif f.kind == 'password' %}
-                <label>{{ f.label }}{% if f.secret_set %} <span class="muted">(gesetzt — leer lassen zum Behalten)</span>{% endif %}</label>
+                <label>{{ f.label }}{% if f.secret_set %} <span class="muted">(gesetzt — leer lassen zum Behalten)</span>{% endif %} {{ help_btn(f.help or f.hint) }}</label>
                 <input type="password" name="{{ f.name }}" value="" autocomplete="new-password" placeholder="{% if f.secret_set %}••••••••{% endif %}">
-              {% elif f.kind in ('list', 'ip_cidr_list') %}
-                <label>{{ f.label }}</label>
+              {% elif f.kind in ('list', 'ip_cidr_list', 'ips_cidrs') %}
+                <label>{{ f.label }} {{ help_btn(f.help or f.hint) }}</label>
                 <textarea name="{{ f.name }}" rows="5">{{ f.value }}</textarea>
               {% else %}
-                <label>{{ f.label }}</label>
+                <label>{{ f.label }} {{ help_btn(f.help or f.hint) }}</label>
                 <input type="text" name="{{ f.name }}" value="{{ f.value }}" autocomplete="off">
               {% endif %}
-              {% if f.hint %}<p class="hint">{{ f.hint }}</p>{% endif %}
             {% endfor %}
             <div class="actions">
               <button class="primary" type="submit">Formular speichern</button>
@@ -132,24 +208,7 @@
   {% endfor %}
 
   <section class="block card">
-    <h2>Installierte Collections</h2>
-    <p class="hint">
-      Dateien in <code>collections/*.yaml</code>. Neue Listen: im CrowdSec-Container
-      <code>cscli collections install crowdsecurity/…</code> — später erweiterbar.
-    </p>
-    {% if setup.collections %}
-      <ul class="file-list">
-        {% for c in setup.collections %}
-          <li><code>{{ c.name }}</code> <span class="muted">{{ c.file }}</span></li>
-        {% endfor %}
-      </ul>
-    {% else %}
-      <p class="muted">Keine Collections gefunden (Ordner nicht gemountet oder leer).</p>
-    {% endif %}
-  </section>
-
-  <section class="block card">
-    <h2>Weitere YAML-Dateien</h2>
+    <h2>Weitere YAML-Dateien {{ help_btn('Alle YAML unter dem gemounteten CrowdSec-Ordner außer Collections und Zugangsdateien. Parser, Scenarios, AppSec, Notifications, acquis.d.') }}</h2>
     <p class="hint">
       Weitere Dateien unter dem CrowdSec-Config-Ordner (acquis.d, parsers, scenarios, …).
       Zugangsdateien (<code>local_api_credentials.yaml</code> usw.) sind gesperrt.
@@ -356,4 +415,24 @@
   Die Client-IP kommt mit, wenn unmittelbar davor «Decision found for IP» steht (Plugin-Log-Level <code>info</code> oder <code>debug</code>).
 </p>
 {% endif %}
+<script>
+(function () {
+  document.addEventListener("click", function (ev) {
+    var btn = ev.target && ev.target.closest ? ev.target.closest(".cs-help-btn") : null;
+    if (!btn) {
+      document.querySelectorAll(".cs-help-tip:not([hidden])").forEach(function (t) {
+        t.setAttribute("hidden", "");
+      });
+      return;
+    }
+    ev.preventDefault();
+    ev.stopPropagation();
+    var tip = btn.parentElement && btn.parentElement.querySelector(".cs-help-tip");
+    if (!tip) return;
+    var open = tip.hasAttribute("hidden");
+    document.querySelectorAll(".cs-help-tip").forEach(function (t) { t.setAttribute("hidden", ""); });
+    if (open) tip.removeAttribute("hidden");
+  });
+})();
+</script>
 {% endblock %}

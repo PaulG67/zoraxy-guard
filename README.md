@@ -127,7 +127,7 @@ Guard pusht diese Blöcke nicht (wie andere 403er). Alarme kommen weiter, wenn e
 
 **Auswertung:** `plugin-manager`-Zeilen (`Request blocked`). Dafür Plugin-Log-Level `info` (nicht nur `warning`) und ggf. History → Reset & laden.
 
-**YAML / Listen:** Unter demselben Reiter die wichtigsten CrowdSec-Dateien in der GUI. Dafür optionale Volumes (Pfade gelten *im Guard-Container*):
+**YAML / Listen:** Collections (Hub) anhaken wie Threat-Listen unter Konfiguration; Community-/Console-Blocklists; Scenarios mit/ohne Ban; Whitelist; Engine; Profile. **?** erklärt jedes Feld.
 
 | Host (Unraid, typisch) | Guard |
 |---|---|
@@ -135,8 +135,8 @@ Guard pusht diese Blöcke nicht (wie andere 403er). Alarme kommen weiter, wenn e
 | Zoraxy-Bouncer-**Ordner** (darin `config.yaml`) | `/crowdsec-bouncer` → Datei `/crowdsec-bouncer/config.yaml` |
 
 Ohne Mount bleibt die Auswertung aktiv; die YAML-Karten zeigen «nicht gemountet».  
-Nach dem Speichern: Bouncer → Zoraxy/Plugin neu starten; Engine/Whitelist/acquis → CrowdSec neu starten.  
-Collections installieren weiterhin per `cscli` im CrowdSec-Container (die GUI listet vorhandene YAML). Neue Felder/Dateien lassen sich später in der Registry ergänzen.
+Nach dem Speichern: Bouncer → Zoraxy/Plugin neu starten; Engine/Listen/acquis → CrowdSec neu starten.  
+Collections: GUI kopiert aus dem lokalen Hub (`hub/.index.json`); sonst `cscli collections install …` im CrowdSec-Container.
 
 Env (optional): `CROWDSEC_CONFIG_DIR`, `CROWDSEC_BOUNCER_CONFIG`.
 

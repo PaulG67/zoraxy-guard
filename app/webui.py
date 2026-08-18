@@ -40,6 +40,7 @@ from .catalog import (
 from . import catalog as catalog_mod
 from .backfill import HOURS_OPTIONS, start_history_backfill
 from . import csconfig
+from . import cshub
 
 log = logging.getLogger("zoraxy-guard.web")
 
@@ -117,6 +118,17 @@ def _crowdsec_setup_post(config_path: str):
         elif action == "extra":
             extra = (request.form.get("extra") or "").strip()
             ok, msg = csconfig.save_extra_raw(cfg, extra, request.form.get("yaml_text") or "")
+            flash(msg, "ok" if ok else "error")
+        elif action == "collections":
+            wanted = request.form.getlist("collection")
+            ok, msg = cshub.install_collections(cfg, wanted)
+            flash(msg, "ok" if ok else "error")
+        elif action == "scenarios":
+            ok, msg = cshub.save_simulation(
+                cfg,
+                global_simulation=request.form.get("global_simulation") == "on",
+                ban_enabled=request.form.getlist("scenario_ban"),
+            )
             flash(msg, "ok" if ok else "error")
         else:
             flash("Unbekannte Aktion.", "error")
