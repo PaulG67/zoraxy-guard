@@ -1,5 +1,5 @@
 #!/bin/bash
-# Install Zoraxy Guard for Unraid: user template + local Docker image
+# Install / update Zoraxy Guard Unraid user template + pull image
 # Run on Unraid Terminal:
 #   bash <(curl -fsSL https://raw.githubusercontent.com/PaulG67/zoraxy-guard/main/unraid/install-template.sh)
 
@@ -11,6 +11,7 @@ SRC_DIR="/mnt/user/appdata/zoraxy-guard-src"
 IMAGE="ghcr.io/paulg67/zoraxy-guard:latest"
 RAW_BASE="https://raw.githubusercontent.com/PaulG67/zoraxy-guard/main"
 REPO="https://github.com/PaulG67/zoraxy-guard.git"
+USER_XML="${TEMPLATE_DIR}/my-zoraxy-guard.xml"
 
 echo "==> 1/4 Appdata"
 mkdir -p "${APP_DIR}/data/lists" "${APP_DIR}/data/feed-cache"
@@ -21,13 +22,22 @@ else
   echo "    keep existing ${APP_DIR}/config.yaml"
 fi
 
-echo "==> 2/4 Unraid-Vorlage (Docker → Container hinzufügen → Template)"
+echo "==> 2/4 Unraid-Vorlage (bestehende Werte bleiben, neue Pfade/Vars kommen dazu)"
 mkdir -p "${TEMPLATE_DIR}"
-curl -fsSL "${RAW_BASE}/unraid/my-zoraxy-guard.xml" -o "${TEMPLATE_DIR}/my-zoraxy-guard.xml"
-echo "    wrote ${TEMPLATE_DIR}/my-zoraxy-guard.xml"
+FRESH="$(mktemp)"
+MERGE="$(mktemp)"
+trap 'rm -f "${FRESH}" "${MERGE}"' EXIT
+curl -fsSL "${RAW_BASE}/unraid/my-zoraxy-guard.xml" -o "${FRESH}"
+curl -fsSL "${RAW_BASE}/unraid/merge-template.php" -o "${MERGE}"
+if command -v php >/dev/null 2>&1; then
+  php "${MERGE}" "${USER_XML}" "${FRESH}"
+else
+  echo "    php fehlt — Vorlage wird komplett ersetzt"
+  cp "${FRESH}" "${USER_XML}"
+fi
+echo "    ${USER_XML}"
 
 echo "==> 3/4 Docker-Image"
-# Prefer pull (Force update later); build only if pull fails
 if docker pull "${IMAGE}" 2>/dev/null; then
   echo "    pulled ${IMAGE}"
 else
@@ -50,13 +60,16 @@ fi
 
 echo "==> 4/4 Fertig"
 echo
-echo "In der Unraid-WebUI:"
-echo "  1) Docker → Container hinzufügen"
-echo "  2) Template-Dropdown → zoraxy-guard wählen"
-echo "  3) Zoraxy-Log-Pfad prüfen (Default: /mnt/user/appdata/zoraxy/log)"
-echo "  4) WEB_PASSWORD setzen (empfohlen)"
-echo "  5) Apply / Erstellen"
-echo "  6) Web-GUI: http://UNRAID-IP:8787"
+echo "Bestehender Container (zoraxy-guard schon da):"
+echo "  1) Docker → zoraxy-guard → Edit"
+echo "  2) Pfade prüfen:"
+echo "       CrowdSec Config  → Host /mnt/user/appdata/crowdsec  (oder .../crowdsec/config)"
+echo "       CrowdSec Bouncer → Host-Ordner mit der Plugin-config.yaml"
+echo "         typisch: /mnt/user/appdata/zoraxy/plugin/zoraxy_crowdsec_bouncer"
+echo "  3) Apply  (Force Update allein hängt KEINE neuen Volumes an)"
 echo
-echo "Bei Image-Updates: Docker → Force Update (ghcr.io/paulg67/zoraxy-guard:latest)."
-echo "Vorlage/Icon aktualisieren: dieses Script erneut, dann Container Edit → Apply."
+echo "Neu installieren:"
+echo "  Docker → Container hinzufügen → Template zoraxy-guard → Pfade prüfen → Apply"
+echo "  GUI: http://UNRAID-IP:8787"
+echo
+echo "Nur neues Image, keine neuen Pfade: Docker → Force Update."

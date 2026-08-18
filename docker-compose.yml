@@ -19,4 +19,4 @@ services:
       - /mnt/user/appdata/zoraxy-guard/data:/data
       # Optional: CrowdSec YAML in der GUI (Reiter CrowdSec → YAML / Listen)
       # - /mnt/user/appdata/crowdsec:/crowdsec-config
-      # - /mnt/user/appdata/zoraxy/plugins/zoraxy_crowdsec_bouncer/config.yaml:/crowdsec-bouncer/config.yaml
+      # - /mnt/user/appdata/zoraxy/plugin/zoraxy_crowdsec_bouncer:/crowdsec-bouncer

@@ -154,7 +154,7 @@ bad_user_agents:
   - wget/
 
 # Optional: CrowdSec YAML über den Reiter CrowdSec → YAML / Listen.
-# Im Container Ordner/Datei mounten (Unraid: optionale Pfade).
+# Im Container Ordner mounten (Unraid-Vorlage: CrowdSec Config + CrowdSec Bouncer).
 crowdsec:
   config_dir: /crowdsec-config                 # CrowdSec /etc/crowdsec
   bouncer_config: /crowdsec-bouncer/config.yaml

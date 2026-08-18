@@ -25,9 +25,9 @@
     <input type="hidden" name="action" value="paths">
     <h2>Pfade im Guard-Container</h2>
     <p class="hint">
-      In Unraid optionale Volumes setzen: CrowdSec-<code>/etc/crowdsec</code> →
-      <code>{{ setup.config_dir }}</code>, Bouncer-<code>config.yaml</code> →
-      <code>{{ setup.bouncer_config }}</code>.
+      In Unraid die Vorlage-Pfade setzen: CrowdSec-<code>/etc/crowdsec</code> →
+      <code>{{ setup.config_dir }}</code>, Bouncer-<strong>Ordner</strong> (mit <code>config.yaml</code>) →
+      <code>/crowdsec-bouncer</code> (Datei <code>{{ setup.bouncer_config }}</code>).
     </p>
     <div class="row2">
       <div>

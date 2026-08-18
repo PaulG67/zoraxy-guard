@@ -29,11 +29,24 @@ Security-Monitor für [Zoraxy](https://github.com/tobychui/zoraxy)-Logs: Exploit
 
 ### Updates (bestehender Container)
 
-Docker → **zoraxy-guard** → **Force update** (zieht `ghcr.io/paulg67/zoraxy-guard:latest`).  
-Kein Script nötig, sobald das Image auf GHCR liegt.
+**Nur neues Image** (Code/GUI): Docker → **zoraxy-guard** → **Force update**.
 
-Icon der Vorlage: [unraid/icon.png](https://raw.githubusercontent.com/PaulG67/zoraxy-guard/main/unraid/icon.png)  
-Wenn Docker noch das alte Bild zeigt: Container **Edit → Apply**, Browser-Cache leeren.
+**Neue Vorlage / CrowdSec-Volumes** (Force Update reicht nicht):
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/PaulG67/zoraxy-guard/main/unraid/install-template.sh)
+```
+
+Das Script ergänzt fehlende Pfade in der User-Vorlage, ohne Passwörter und Webhooks zu überschreiben. Danach:
+
+1. Docker → **zoraxy-guard** → **Edit**
+2. **CrowdSec Config** = CrowdSec `/etc/crowdsec` auf dem Host (Default `/mnt/user/appdata/crowdsec`, ggf. `…/crowdsec/config`)
+3. **CrowdSec Bouncer** = **Ordner** mit der Plugin-`config.yaml` (Default `/mnt/user/appdata/zoraxy/plugin/zoraxy_crowdsec_bouncer`)
+4. **Apply** — Unraid erzeugt den Container mit den neuen Mounts neu
+
+Ohne Schritt Edit → Apply bleiben die YAML-Karten auf «nicht gemountet».
+
+Icon: [unraid/icon.png](https://raw.githubusercontent.com/PaulG67/zoraxy-guard/main/unraid/icon.png) — bei altem Bild nach Apply den Browser-Cache leeren.
 
 ### Erstinstallation – einmal im Unraid-Terminal
 
@@ -57,7 +70,7 @@ Danach in der Unraid-WebUI:
 5. **Apply**
 6. GUI: `http://UNRAID-IP:8787`
 
-Vorlage nach Icon-/XML-Änderung: Script erneut ausführen, dann Container **Edit → Apply**.
+Vorlage nach XML-Änderung: Script erneut (merged, überschreibt Secrets nicht), dann Container **Edit → Apply**.
 
 ### Manuell ohne Script
 
@@ -119,7 +132,7 @@ Guard pusht diese Blöcke nicht (wie andere 403er). Alarme kommen weiter, wenn e
 | Host (Unraid, typisch) | Guard |
 |---|---|
 | CrowdSec `/etc/crowdsec`, z. B. `/mnt/user/appdata/crowdsec` | `/crowdsec-config` |
-| Zoraxy-Bouncer `config.yaml` | `/crowdsec-bouncer/config.yaml` |
+| Zoraxy-Bouncer-**Ordner** (darin `config.yaml`) | `/crowdsec-bouncer` → Datei `/crowdsec-bouncer/config.yaml` |
 
 Ohne Mount bleibt die Auswertung aktiv; die YAML-Karten zeigen «nicht gemountet».  
 Nach dem Speichern: Bouncer → Zoraxy/Plugin neu starten; Engine/Whitelist/acquis → CrowdSec neu starten.  
@@ -148,7 +161,7 @@ services:
       - /mnt/user/appdata/zoraxy-guard/data:/data
       # Optional CrowdSec YAML (GUI):
       # - /mnt/user/appdata/crowdsec:/crowdsec-config
-      # - /mnt/user/appdata/zoraxy/plugins/zoraxy_crowdsec_bouncer/config.yaml:/crowdsec-bouncer/config.yaml
+      # - /mnt/user/appdata/zoraxy/plugin/zoraxy_crowdsec_bouncer:/crowdsec-bouncer
 ```
 
 Env (optional): `DISCORD_WEBHOOK`, `PUSHOVER_USER_KEY` + `PUSHOVER_API_TOKEN`, `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`, `MIN_SEVERITY`

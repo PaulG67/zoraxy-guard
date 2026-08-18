@@ -10,13 +10,14 @@
   <Support>https://github.com/PaulG67/zoraxy-guard/issues</Support>
   <Project>https://github.com/PaulG67/zoraxy-guard</Project>
   <Overview>
-Zoraxy Guard – Security-Monitor für Zoraxy-Logs. Erkennt Exploit-Scans, Threat-Listen und Zugriffe mit Handlungsbedarf. Web-GUI auf Port 8787 (Status, History, Geprüft, Konfiguration). Alarme: Pushover, Discord, Telegram. Standard: nur Handlungsbedarf, keine 403-Scanner. Geprüfte Links bleiben stumm, bis du sie unter «Geprüft» wieder freigibst.&#13;
+Zoraxy Guard – Security-Monitor für Zoraxy-Logs. Erkennt Exploit-Scans, Threat-Listen und Zugriffe mit Handlungsbedarf. Web-GUI auf Port 8787 (Status, History, CrowdSec, Geprüft, Konfiguration). Alarme: Pushover, Discord, Telegram. Standard: nur Handlungsbedarf, keine 403-Scanner.&#13;
 &#13;
-SETUP (einmal im Unraid-Terminal):&#13;
+CrowdSec YAML in der GUI: Pfade «CrowdSec Config» (/etc/crowdsec) und «CrowdSec Bouncer» (Plugin-Ordner mit config.yaml). Host-Pfade prüfen, dann Apply.&#13;
+&#13;
+SETUP / Vorlage aktualisieren (Unraid-Terminal):&#13;
 bash &lt;(curl -fsSL https://raw.githubusercontent.com/PaulG67/zoraxy-guard/main/unraid/install-template.sh)&#13;
-&#13;
-Danach: Docker → Container hinzufügen → Template zoraxy-guard → Apply. GUI: http://TOWER:8787&#13;
-Updates: Docker → Force Update (ghcr.io/paulg67/zoraxy-guard:latest).
+Danach bestehenden Container: Docker → zoraxy-guard → Edit → CrowdSec-Pfade prüfen → Apply.&#13;
+Image-only: Docker → Force Update. Neue Volumes kommen nur mit Edit → Apply.
   </Overview>
   <Category>Security: Network:Other Tools: Productivity:</Category>
   <WebUI>http://[IP]:[PORT:8787]/</WebUI>
@@ -28,7 +29,7 @@ Updates: Docker → Force Update (ghcr.io/paulg67/zoraxy-guard:latest).
   <DateInstalled></DateInstalled>
   <DonateText></DonateText>
   <DonateLink></DonateLink>
-  <Requires>Einmal install-template.sh ausführen (Vorlage + Image)</Requires>
+  <Requires>install-template.sh (Vorlage). Neue Pfade: Script, dann Container Edit → Apply.</Requires>
 
   <Config Name="WebUI" Target="8787" Default="8787" Mode="tcp" Description="Web-Oberfläche" Type="Port" Display="always" Required="true" Mask="false">8787</Config>
 
@@ -36,14 +37,17 @@ Updates: Docker → Force Update (ghcr.io/paulg67/zoraxy-guard:latest).
   <Config Name="Config File" Target="/config/config.yaml" Default="/mnt/user/appdata/zoraxy-guard/config.yaml" Mode="rw" Description="config.yaml (schreibbar für GUI)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/zoraxy-guard/config.yaml</Config>
   <Config Name="Appdata Data" Target="/data" Default="/mnt/user/appdata/zoraxy-guard/data" Mode="rw" Description="State, Listen, Feed-Cache" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/zoraxy-guard/data</Config>
 
-  <Config Name="CrowdSec Config" Target="/crowdsec-config" Default="" Mode="rw" Description="Optional: CrowdSec /etc/crowdsec (z.B. /mnt/user/appdata/crowdsec) für YAML/Listen in der GUI" Type="Path" Display="always" Required="false" Mask="false"></Config>
-  <Config Name="CrowdSec Bouncer YAML" Target="/crowdsec-bouncer/config.yaml" Default="" Mode="rw" Description="Optional: Zoraxy CrowdSec-Plugin config.yaml (log_level, API-Key)" Type="Path" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="CrowdSec Config" Target="/crowdsec-config" Default="/mnt/user/appdata/crowdsec" Mode="rw" Description="CrowdSec /etc/crowdsec (oft /mnt/user/appdata/crowdsec oder .../crowdsec/config). Für Reiter CrowdSec → YAML / Listen." Type="Path" Display="always" Required="false" Mask="false">/mnt/user/appdata/crowdsec</Config>
+  <Config Name="CrowdSec Bouncer" Target="/crowdsec-bouncer" Default="/mnt/user/appdata/zoraxy/plugin/zoraxy_crowdsec_bouncer" Mode="rw" Description="Zoraxy CrowdSec-Plugin-Ordner mit config.yaml (nicht die Datei allein). Alternativ .../plugins/zoraxy_crowdsec_bouncer" Type="Path" Display="always" Required="false" Mask="false">/mnt/user/appdata/zoraxy/plugin/zoraxy_crowdsec_bouncer</Config>
 
   <Config Name="Timezone" Target="TZ" Default="Europe/Zurich" Mode="rw" Description="Zeitzone" Type="Variable" Display="always" Required="false" Mask="false">Europe/Zurich</Config>
   <Config Name="Config Path (internal)" Target="ZORAXY_GUARD_CONFIG" Default="/config/config.yaml" Mode="rw" Description="Pfad zur Config im Container" Type="Variable" Display="advanced" Required="false" Mask="false">/config/config.yaml</Config>
   <Config Name="Web UI enabled" Target="WEB_ENABLED" Default="true" Mode="rw" Description="true/false" Type="Variable" Display="advanced" Required="false" Mask="false">true</Config>
   <Config Name="Web Port (container)" Target="WEB_PORT" Default="8787" Mode="rw" Description="Port im Container" Type="Variable" Display="advanced" Required="false" Mask="false">8787</Config>
   <Config Name="Web Password" Target="WEB_PASSWORD" Default="" Mode="rw" Description="Passwort für Web-GUI (leer = kein Login)" Type="Variable" Display="always" Required="false" Mask="true"></Config>
+
+  <Config Name="CrowdSec Config Dir (internal)" Target="CROWDSEC_CONFIG_DIR" Default="/crowdsec-config" Mode="rw" Description="Pfad zu CrowdSec /etc/crowdsec IM Guard-Container (zum Volume CrowdSec Config passend)" Type="Variable" Display="advanced" Required="false" Mask="false">/crowdsec-config</Config>
+  <Config Name="CrowdSec Bouncer YAML (internal)" Target="CROWDSEC_BOUNCER_CONFIG" Default="/crowdsec-bouncer/config.yaml" Mode="rw" Description="Pfad zur Bouncer-config.yaml IM Guard-Container" Type="Variable" Display="advanced" Required="false" Mask="false">/crowdsec-bouncer/config.yaml</Config>
 
   <Config Name="Discord Webhook" Target="DISCORD_WEBHOOK" Default="" Mode="rw" Description="Optional" Type="Variable" Display="always" Required="false" Mask="true"></Config>
   <Config Name="Telegram Bot Token" Target="TELEGRAM_BOT_TOKEN" Default="" Mode="rw" Description="Optional" Type="Variable" Display="always" Required="false" Mask="true"></Config>
