@@ -19,6 +19,7 @@
       <nav>
         <a href="{{ url_for('dashboard') }}" class="{% if request.endpoint == 'dashboard' %}active{% endif %}">Status</a>
         <a href="{{ url_for('history_page') }}" class="{% if request.endpoint == 'history_page' %}active{% endif %}">History</a>
+        <a href="{{ url_for('reviewed_page') }}" class="{% if request.endpoint == 'reviewed_page' %}active{% endif %}">Geprüft</a>
         <a href="{{ url_for('config_page') }}" class="{% if request.endpoint == 'config_page' %}active{% endif %}">Konfiguration</a>
         <a href="{{ url_for('lists_page') }}" class="{% if request.endpoint == 'lists_page' %}active{% endif %}">Listen</a>
         {% if has_password %}

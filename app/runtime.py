@@ -272,6 +272,43 @@ class Runtime:
     def is_alert_acked(self, fingerprint: str) -> bool:
         return self.acks.is_acked(fingerprint) if fingerprint else False
 
+    def reviewed_view(
+        self,
+        *,
+        q: str = "",
+        origin: str = "",
+        path: str = "",
+        title: str = "",
+        review_id_q: str = "",
+    ) -> dict[str, Any]:
+        data = self.acks.query(
+            q=q, origin=origin, path=path, title=title, review_id_q=review_id_q
+        )
+        by_fp: dict[str, dict] = {}
+        with self.lock:
+            for rec in self.recent_alerts:
+                fp = rec.get("fingerprint") or ""
+                if fp:
+                    by_fp[fp] = rec
+        for row in data["items"]:
+            rec = by_fp.get(row.get("fingerprint") or "") or {}
+            if not row.get("origin"):
+                row["origin"] = rec.get("origin") or ""
+            if not row.get("path"):
+                row["path"] = rec.get("path") or ""
+            if not row.get("title"):
+                row["title"] = rec.get("title") or ""
+            if not row.get("client"):
+                row["client"] = rec.get("client") or ""
+            row["check_url"] = (
+                row.get("check_url")
+                or rec.get("check_url")
+                or build_check_url(row.get("origin") or "", row.get("path") or "")
+            )
+            fp = row.get("fingerprint") or ""
+            row["kind"] = fp.split(":", 1)[0] if fp else ""
+        return data
+
     def memory_state(self) -> dict[str, Any]:
         """
         Single source of truth for Memory (History ring) + process analysis clocks.

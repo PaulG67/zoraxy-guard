@@ -149,10 +149,41 @@ def create_app(config_path: str) -> Flask:
         if not fp:
             return jsonify({"error": "fingerprint oder Prüf-ID fehlt"}), 400
         note = (data.get("note") or "").strip()
-        title = (data.get("title") or (resolved or {}).get("title") or "").strip()
-        origin = (data.get("origin") or (resolved or {}).get("origin") or "").strip()
-        path = (data.get("path") or (resolved or {}).get("path") or "").strip()
-        entry = rt.RUNTIME.acks.ack(fp, title=title, origin=origin, path=path, note=note)
+        extra: dict = {}
+        with rt.RUNTIME.lock:
+            for rec in rt.RUNTIME.recent_alerts:
+                if rec.get("fingerprint") == fp:
+                    extra = rec
+                    break
+        title = (
+            data.get("title")
+            or (resolved or {}).get("title")
+            or extra.get("title")
+            or ""
+        ).strip()
+        origin = (
+            data.get("origin")
+            or (resolved or {}).get("origin")
+            or extra.get("origin")
+            or ""
+        ).strip()
+        path = (
+            data.get("path")
+            or (resolved or {}).get("path")
+            or extra.get("path")
+            or ""
+        ).strip()
+        entry = rt.RUNTIME.acks.ack(
+            fp,
+            title=title,
+            origin=origin,
+            path=path,
+            note=note,
+            client=(extra.get("client") or ""),
+            method=(extra.get("method") or ""),
+            status=extra.get("status"),
+            check_url=(extra.get("check_url") or ""),
+        )
         rt.RUNTIME.mark_alert_acked(fp)
         return jsonify({
             "ok": True,
@@ -182,6 +213,55 @@ def create_app(config_path: str) -> Flask:
                     if rec.get("risk"):
                         rec["risk"] = dict(rec["risk"])
         return jsonify({"ok": ok, "fingerprint": fp, "acked_count": rt.RUNTIME.acks.count()})
+
+    @app.route("/reviewed")
+    @login_required
+    def reviewed_page():
+        if not rt.RUNTIME:
+            flash("Runtime nicht bereit.", "error")
+            return redirect(url_for("dashboard"))
+        filters = {
+            "q": (request.args.get("q") or "").strip(),
+            "origin": (request.args.get("origin") or "").strip(),
+            "path": (request.args.get("path") or "").strip(),
+            "title": (request.args.get("title") or "").strip(),
+            "review_id_q": (request.args.get("id") or "").strip(),
+        }
+        data = rt.RUNTIME.reviewed_view(**filters)
+        return render_template(
+            "reviewed.html",
+            data=data,
+            filters=filters,
+            time=time,
+        )
+
+    @app.route("/reviewed/unack", methods=["POST"])
+    @login_required
+    def reviewed_unack():
+        if not rt.RUNTIME:
+            flash("Runtime nicht bereit.", "error")
+            return redirect(url_for("dashboard"))
+        fp = (request.form.get("fingerprint") or "").strip()
+        if not fp:
+            flash("Fingerprint fehlt.", "error")
+            return redirect(url_for("reviewed_page"))
+        ok = rt.RUNTIME.acks.unack(fp)
+        with rt.RUNTIME.lock:
+            for rec in rt.RUNTIME.recent_alerts:
+                if rec.get("fingerprint") == fp:
+                    rec["acked"] = False
+                    if rec.get("risk"):
+                        rec["risk"] = dict(rec["risk"])
+        flash(
+            "Alarmierung wieder aktiv — dieser Link wird erneut gemeldet." if ok else "Eintrag nicht gefunden.",
+            "ok" if ok else "error",
+        )
+        args = {}
+        for key in ("q", "origin", "path", "title", "id"):
+            val = (request.form.get(key) or "").strip()
+            if val:
+                args[key] = val
+        return redirect(url_for("reviewed_page", **args))
 
     @app.route("/api/checks/expect", methods=["POST"])
     @login_required

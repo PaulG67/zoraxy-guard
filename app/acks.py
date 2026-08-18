@@ -163,6 +163,10 @@ class AckStore:
         origin: str = "",
         path: str = "",
         note: str = "",
+        client: str = "",
+        method: str = "",
+        status: Any = None,
+        check_url: str = "",
     ) -> dict:
         if not fingerprint:
             raise ValueError("fingerprint required")
@@ -173,6 +177,10 @@ class AckStore:
             "path": (path or "")[:200],
             "note": (note or "")[:300],
             "review_id": review_id(fingerprint),
+            "client": (client or "")[:80],
+            "method": (method or "")[:16],
+            "status": status,
+            "check_url": (check_url or "")[:400],
         }
         with self._lock:
             self._acks[fingerprint] = entry
@@ -191,6 +199,82 @@ class AckStore:
             del self._acks[fingerprint]
         self.save()
         return True
+
+    def query(
+        self,
+        *,
+        q: str = "",
+        origin: str = "",
+        path: str = "",
+        title: str = "",
+        review_id_q: str = "",
+        limit: int = 2000,
+    ) -> dict[str, Any]:
+        """Filter reviewed fingerprints for the Geprüft tab."""
+        qn = (q or "").strip().lower()
+        origin_f = (origin or "").strip().lower()
+        path_f = (path or "").strip().lower()
+        title_f = (title or "").strip().lower()
+        rid_raw = (review_id_q or "").strip()
+        rid_norm = normalize_review_id(rid_raw)
+        rid_f = (rid_norm or rid_raw).lower()
+
+        with self._lock:
+            items = sorted(self._acks.items(), key=lambda kv: -float(kv[1].get("ts") or 0))
+            id_map = {k: dict(v) for k, v in self._ids.items()}
+
+        all_origins: set[str] = set()
+        all_paths: set[str] = set()
+        rows: List[dict] = []
+        for fp, meta in items:
+            row = dict(meta)
+            row["fingerprint"] = fp
+            rid = row.get("review_id") or review_id(fp)
+            row["review_id"] = rid
+            extra = id_map.get(rid) or {}
+            row["origin"] = (row.get("origin") or extra.get("origin") or "").strip()
+            row["path"] = (row.get("path") or extra.get("path") or "").strip() or ""
+            row["title"] = (row.get("title") or extra.get("title") or "").strip()
+            row["note"] = (row.get("note") or "").strip()
+            row["client"] = (row.get("client") or extra.get("client") or "").strip()
+            row["method"] = (row.get("method") or "").strip()
+            if row["origin"]:
+                all_origins.add(row["origin"])
+            if row["path"]:
+                all_paths.add(row["path"])
+            hay = " ".join(
+                [
+                    rid,
+                    fp,
+                    row["origin"],
+                    row["path"],
+                    row["title"],
+                    row["note"],
+                    row["client"],
+                    str(row.get("status") or ""),
+                ]
+            ).lower()
+            if qn and qn not in hay:
+                continue
+            if origin_f and origin_f not in row["origin"].lower():
+                continue
+            if path_f and path_f not in (row["path"] or "").lower():
+                continue
+            if title_f and title_f not in row["title"].lower():
+                continue
+            if rid_f:
+                blob = f"{rid} {fp}".lower()
+                if rid_f not in blob and (rid_norm or "") != rid:
+                    continue
+            rows.append(row)
+
+        return {
+            "items": rows[: max(1, int(limit))],
+            "total": len(items),
+            "filtered": len(rows),
+            "origins": sorted(all_origins, key=str.lower),
+            "paths": sorted(all_paths, key=str.lower)[:80],
+        }
 
     def list_acks(self, limit: int = 100) -> List[dict]:
         with self._lock:

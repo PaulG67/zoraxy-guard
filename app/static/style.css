@@ -340,6 +340,17 @@ section.block { margin-bottom: 18px; }
 /* History */
 .wrap { max-width: 1180px; }
 .hist-filters { margin-bottom: 16px; }
+.rev-filter-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+@media (max-width: 900px) {
+  .rev-filter-row { grid-template-columns: 1fr 1fr; }
+}
+.inline-unack { margin: 0; display: inline; }
+.inline-unack button { white-space: nowrap; }
 .hist-filter-row {
   display: grid;
   grid-template-columns: 140px 180px 1fr auto;

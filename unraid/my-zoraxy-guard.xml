@@ -10,7 +10,7 @@
   <Support>https://github.com/PaulG67/zoraxy-guard/issues</Support>
   <Project>https://github.com/PaulG67/zoraxy-guard</Project>
   <Overview>
-Zoraxy Guard – Security-Monitor für Zoraxy-Logs. Erkennt Exploit-Scans, Threat-Listen und Zugriffe mit Handlungsbedarf. Web-GUI auf Port 8787 (Status, History, Konfiguration). Alarme: Pushover, Discord, Telegram. Standard: nur Handlungsbedarf, keine 403-Scanner, keine bereits geprüften Alarme.&#13;
+Zoraxy Guard – Security-Monitor für Zoraxy-Logs. Erkennt Exploit-Scans, Threat-Listen und Zugriffe mit Handlungsbedarf. Web-GUI auf Port 8787 (Status, History, Geprüft, Konfiguration). Alarme: Pushover, Discord, Telegram. Standard: nur Handlungsbedarf, keine 403-Scanner. Geprüfte Links bleiben stumm, bis du sie unter «Geprüft» wieder freigibst.&#13;
 &#13;
 SETUP (einmal im Unraid-Terminal):&#13;
 bash &lt;(curl -fsSL https://raw.githubusercontent.com/PaulG67/zoraxy-guard/main/unraid/install-template.sh)&#13;

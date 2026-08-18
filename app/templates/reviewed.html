@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Geprüft · {{ app_name }}{% endblock %}
+{% block content %}
+
+<section class="block">
+  <h2 style="margin:0 0 6px;font-size:1.15rem;">Geprüfte Links</h2>
+  <p class="hint" style="margin-top:0;">
+    Diese Fingerprints lösen <strong>keinen Push-Alarm</strong> mehr aus.
+    «Alarmierung aktivieren» nimmt die Prüfung zurück — derselbe Vorgang kann wieder gemeldet werden.
+    Gespeichert in <code>/data/acks.json</code> (überlebt Neustarts).
+  </p>
+</section>
+
+<form class="card hist-filters" method="get" action="{{ url_for('reviewed_page') }}">
+  <div class="rev-filter-row">
+    <div>
+      <label for="origin">Domain / Host</label>
+      <input type="text" name="origin" id="origin" value="{{ filters.origin }}" list="origin-list" placeholder="z. B. auth.gehring.li" autocomplete="off">
+      <datalist id="origin-list">
+        {% for o in data.origins %}
+          <option value="{{ o }}"></option>
+        {% endfor %}
+      </datalist>
+    </div>
+    <div>
+      <label for="path">Pfad</label>
+      <input type="text" name="path" id="path" value="{{ filters.path }}" list="path-list" placeholder="z. B. /.git" autocomplete="off">
+      <datalist id="path-list">
+        {% for p in data.paths %}
+          <option value="{{ p }}"></option>
+        {% endfor %}
+      </datalist>
+    </div>
+    <div>
+      <label for="title">Titel / Art</label>
+      <input type="text" name="title" id="title" value="{{ filters.title }}" placeholder="Exploit, Blocklist…" autocomplete="off">
+    </div>
+    <div>
+      <label for="id">Prüf-ID</label>
+      <input type="text" name="id" id="id" value="{{ filters.review_id_q }}" placeholder="ZG-…" autocomplete="off" spellcheck="false">
+    </div>
+  </div>
+  <div class="hist-filter-row" style="margin-top:10px;">
+    <div class="hist-search">
+      <label for="q">Suche (überall)</label>
+      <input type="text" name="q" id="q" value="{{ filters.q }}" placeholder="Domain, Pfad, ID, Fingerprint, Titel…" autocomplete="off">
+    </div>
+    <div class="hist-go">
+      <label>&nbsp;</label>
+      <button type="submit" class="primary">Filtern</button>
+    </div>
+    <div class="hist-go">
+      <label>&nbsp;</label>
+      <a class="btn" href="{{ url_for('reviewed_page') }}">Filter leeren</a>
+    </div>
+  </div>
+</form>
+
+<div class="grid stats">
+  <div class="card">
+    <div class="stat-label">Geprüft gesamt</div>
+    <div class="stat-value">{{ data.total }}</div>
+  </div>
+  <div class="card">
+    <div class="stat-label">Angezeigt</div>
+    <div class="stat-value">{{ data.filtered }}</div>
+  </div>
+  <div class="card">
+    <div class="stat-label">Domains</div>
+    <div class="stat-value">{{ data.origins|length }}</div>
+  </div>
+</div>
+
+{% if not data.items %}
+  <div class="card">
+    <p class="muted" style="margin:0;">
+      {% if data.total %}
+        Keine Einträge für diesen Filter.
+      {% else %}
+        Noch keine geprüften Links. Unter Status «Geprüft» oder eine Prüf-ID eintragen.
+      {% endif %}
+    </p>
+  </div>
+{% else %}
+  <div class="hist-table-wrap card" style="padding:0; overflow:auto;">
+    <table class="hist-table">
+      <thead>
+        <tr>
+          <th>Geprüft am</th>
+          <th>ID</th>
+          <th>Domain</th>
+          <th>Pfad</th>
+          <th>Titel</th>
+          <th>Link</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in data.items %}
+          <tr>
+            <td class="mono nowrap">
+              {% if row.ts %}{{ time.strftime('%Y-%m-%d %H:%M', time.localtime(row.ts)) }}{% else %}—{% endif %}
+            </td>
+            <td class="mono"><span class="alert-id">{{ row.review_id or '—' }}</span></td>
+            <td class="mono">{{ row.origin or '—' }}</td>
+            <td class="mono path-cell" title="{{ row.path }}">{{ row.path or '—' }}</td>
+            <td>
+              {{ row.title or row.kind or '—' }}
+              {% if row.client %}<div class="muted" style="font-size:0.78rem;">von {{ row.client }}</div>{% endif %}
+            </td>
+            <td>
+              {% if row.check_url %}
+                <a href="{{ row.check_url }}" class="btn-check btn-check-sm" target="_blank" rel="noopener noreferrer"
+                   data-origin="{{ row.origin or '' }}" data-path="{{ row.path or '/' }}"
+                   title="{{ row.check_url }}">Prüfen ↗</a>
+              {% else %}
+                <span class="muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              <form method="post" action="{{ url_for('reviewed_unack') }}" class="inline-unack"
+                    onsubmit="return confirm('Alarmierung für {{ row.review_id or row.origin }} wieder aktivieren?');">
+                <input type="hidden" name="fingerprint" value="{{ row.fingerprint }}">
+                <input type="hidden" name="q" value="{{ filters.q }}">
+                <input type="hidden" name="origin" value="{{ filters.origin }}">
+                <input type="hidden" name="path" value="{{ filters.path }}">
+                <input type="hidden" name="title" value="{{ filters.title }}">
+                <input type="hidden" name="id" value="{{ filters.review_id_q }}">
+                <button type="submit" class="btn-ack-undo">Alarmierung aktivieren</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if data.filtered > data.items|length %}
+    <p class="hint">Zeigt die neuesten {{ data.items|length }} von {{ data.filtered }} Treffern.</p>
+  {% endif %}
+{% endif %}
+
+{% endblock %}

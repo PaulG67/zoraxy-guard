@@ -19,6 +19,7 @@ Security-Monitor für [Zoraxy](https://github.com/tobychui/zoraxy)-Logs: Exploit
 - **History:** gemeinsamer Memory-Ring (Status + History), Filter, Geo/ASN, Disk-Nachladen
 - **Prüfen ↗:** öffnet Domain + Pfad im Browser; der eigene Folgeaufruf erzeugt **keinen** Alarm
 - **Prüf-ID** (`ZG-…`) in Pushover und in der Web-UI — offene IDs per Dropdown oder eigene Eingabe als **geprüft** markieren
+- **Geprüft-Reiter:** alle stummen Links, Filter nach Domain/Pfad/ID, Alarmierung wieder aktivieren
 - **Push-Filter:** nur Handlungsbedarf, keine geblockten 403, keine bereits geprüften Fingerprints (einstellbar)
 - Threat-Listen-Katalog, Allow-/Blocklist, sensible Hosts
 
@@ -81,6 +82,7 @@ docker pull ghcr.io/paulg67/zoraxy-guard:latest
 |---|---|
 | **Status** | Memory-Banner, letzte Alarme, Prüfen-Link, Prüf-ID (Auswahl + Eingabe), Test-Alarm |
 | **History** | Zugriffe im Ring, Filter (Erfolg/Fail, Handlungsbedarf, Lärm), Prüfen bei Handlungsbedarf, Reset & laden |
+| **Geprüft** | Stumme Links ohne Push, Filter nach Domain/Pfad/ID/Titel, «Alarmierung aktivieren» |
 | **Konfiguration** | Logs, Listen, Schwellwerte, **welche Alarme gepusht werden** |
 | **Listen** | lokale Blocklisten + Katalog-Update |
 
@@ -96,6 +98,9 @@ Unter **Konfiguration → Alarme** (Standard):
 
 In der Pushover-Nachricht stehen **Prüfen**-Link und **ID: ZG-…**.  
 Dieselbe ID in der Web-UI wählen oder eintippen → **Als geprüft markieren**.
+
+Unter **Geprüft** siehst du alle stummen Links. Filter: Domain, Pfad, Titel, Prüf-ID, Freitext.  
+**Alarmierung aktivieren** nimmt die Prüfung zurück — derselbe Vorgang kann wieder gepusht werden.
 
 «Prüfen ↗» in Status/History: nächster Aufruf auf Domain+Pfad wird einmalig ignoriert (kein False-Positive durch dich selbst).
 
