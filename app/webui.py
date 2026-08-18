@@ -39,6 +39,7 @@ from .catalog import (
 )
 from . import catalog as catalog_mod
 from .backfill import HOURS_OPTIONS, start_history_backfill
+from . import csconfig
 
 log = logging.getLogger("zoraxy-guard.web")
 
@@ -75,6 +76,58 @@ def _as_text(value: Any) -> str:
     if isinstance(value, list):
         return "\n".join(str(x) for x in value)
     return str(value)
+
+
+def _crowdsec_setup_post(config_path: str):
+    """Save CrowdSec YAML or Guard path settings from the CrowdSec tab."""
+    action = (request.form.get("action") or "").strip()
+    extra = (request.form.get("extra") or request.args.get("extra") or "").strip()
+    cfg = rt.RUNTIME.cfg if rt.RUNTIME else {}
+
+    try:
+        if action == "paths":
+            disk = _load_yaml_file(config_path)
+            cs = disk.get("crowdsec")
+            if not isinstance(cs, dict):
+                cs = {}
+                disk["crowdsec"] = cs
+            cs["config_dir"] = (request.form.get("config_dir") or "").strip() or csconfig.DEFAULT_CONFIG_DIR
+            cs["bouncer_config"] = (
+                request.form.get("bouncer_config") or ""
+            ).strip() or csconfig.DEFAULT_BOUNCER_CONFIG
+            _save_yaml_file(config_path, disk)
+            if rt.RUNTIME:
+                with rt.RUNTIME.lock:
+                    live = rt.RUNTIME.cfg.get("crowdsec")
+                    if not isinstance(live, dict):
+                        live = {}
+                        rt.RUNTIME.cfg["crowdsec"] = live
+                    live["config_dir"] = cs["config_dir"]
+                    live["bouncer_config"] = cs["bouncer_config"]
+                rt.RUNTIME.request_reload()
+            flash("Pfade gespeichert. YAML-Dateien unten neu einlesen.", "ok")
+        elif action == "form":
+            ok, msg = csconfig.save_document_form(cfg, request.form.get("doc") or "", request.form)
+            flash(msg, "ok" if ok else "error")
+        elif action == "raw":
+            ok, msg = csconfig.save_document_raw(
+                cfg, request.form.get("doc") or "", request.form.get("yaml_text") or ""
+            )
+            flash(msg, "ok" if ok else "error")
+        elif action == "extra":
+            extra = (request.form.get("extra") or "").strip()
+            ok, msg = csconfig.save_extra_raw(cfg, extra, request.form.get("yaml_text") or "")
+            flash(msg, "ok" if ok else "error")
+        else:
+            flash("Unbekannte Aktion.", "error")
+    except Exception as exc:
+        log.exception("CrowdSec YAML save failed")
+        flash(f"Speichern fehlgeschlagen: {exc}", "error")
+
+    args = {"view": "setup"}
+    if extra:
+        args["extra"] = extra
+    return redirect(url_for("crowdsec_page", **args))
 
 
 def create_app(config_path: str) -> Flask:
@@ -327,12 +380,32 @@ def create_app(config_path: str) -> Flask:
             api_status_url=url_for("api_status"),
         )
 
-    @app.route("/crowdsec")
+    @app.route("/crowdsec", methods=["GET", "POST"])
     @login_required
     def crowdsec_page():
         if not rt.RUNTIME:
             flash("Runtime nicht bereit.", "error")
             return redirect(url_for("dashboard"))
+
+        if request.method == "POST":
+            return _crowdsec_setup_post(config_path)
+
+        view = (request.args.get("view") or "blocks").strip().lower()
+        if view not in ("blocks", "setup"):
+            view = "blocks"
+        mem = rt.RUNTIME.memory_state()
+        if view == "setup":
+            extra = (request.args.get("extra") or "").strip()
+            setup = csconfig.setup_context(rt.RUNTIME.cfg, extra_rel=extra)
+            return render_template(
+                "crowdsec.html",
+                view="setup",
+                data=None,
+                setup=setup,
+                mem=mem,
+                time=time,
+            )
+
         window = (request.args.get("w") or "1h").strip().lower()
         if window not in ("1h", "6h", "12h", "24h"):
             window = "1h"
@@ -346,10 +419,11 @@ def create_app(config_path: str) -> Flask:
         data["plugin_seen"] = bool(rt.RUNTIME.crowdsec.seen_plugin)
         data["plugin_lines"] = int(rt.RUNTIME.crowdsec.lines_seen)
         data["plugin_blocks"] = int(rt.RUNTIME.crowdsec.blocks_parsed)
-        mem = rt.RUNTIME.memory_state()
         return render_template(
             "crowdsec.html",
+            view="blocks",
             data=data,
+            setup=None,
             mem=mem,
             time=time,
         )

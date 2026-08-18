@@ -48,4 +48,14 @@ def apply_env_overrides(cfg: Dict[str, Any]) -> Dict[str, Any]:
         cfg["lists_refresh_hours"] = float(os.environ["LISTS_REFRESH_HOURS"])
     if os.environ.get("TZ"):
         pass  # handled by container TZ
+
+    if os.environ.get("CROWDSEC_CONFIG_DIR") or os.environ.get("CROWDSEC_BOUNCER_CONFIG"):
+        cs = cfg.get("crowdsec")
+        if not isinstance(cs, dict):
+            cs = {}
+            cfg["crowdsec"] = cs
+        if os.environ.get("CROWDSEC_CONFIG_DIR"):
+            cs["config_dir"] = os.environ["CROWDSEC_CONFIG_DIR"].strip()
+        if os.environ.get("CROWDSEC_BOUNCER_CONFIG"):
+            cs["bouncer_config"] = os.environ["CROWDSEC_BOUNCER_CONFIG"].strip()
     return cfg

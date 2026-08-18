@@ -36,6 +36,9 @@ Updates: Docker → Force Update (ghcr.io/paulg67/zoraxy-guard:latest).
   <Config Name="Config File" Target="/config/config.yaml" Default="/mnt/user/appdata/zoraxy-guard/config.yaml" Mode="rw" Description="config.yaml (schreibbar für GUI)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/zoraxy-guard/config.yaml</Config>
   <Config Name="Appdata Data" Target="/data" Default="/mnt/user/appdata/zoraxy-guard/data" Mode="rw" Description="State, Listen, Feed-Cache" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/zoraxy-guard/data</Config>
 
+  <Config Name="CrowdSec Config" Target="/crowdsec-config" Default="" Mode="rw" Description="Optional: CrowdSec /etc/crowdsec (z.B. /mnt/user/appdata/crowdsec) für YAML/Listen in der GUI" Type="Path" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="CrowdSec Bouncer YAML" Target="/crowdsec-bouncer/config.yaml" Default="" Mode="rw" Description="Optional: Zoraxy CrowdSec-Plugin config.yaml (log_level, API-Key)" Type="Path" Display="always" Required="false" Mask="false"></Config>
+
   <Config Name="Timezone" Target="TZ" Default="Europe/Zurich" Mode="rw" Description="Zeitzone" Type="Variable" Display="always" Required="false" Mask="false">Europe/Zurich</Config>
   <Config Name="Config Path (internal)" Target="ZORAXY_GUARD_CONFIG" Default="/config/config.yaml" Mode="rw" Description="Pfad zur Config im Container" Type="Variable" Display="advanced" Required="false" Mask="false">/config/config.yaml</Config>
   <Config Name="Web UI enabled" Target="WEB_ENABLED" Default="true" Mode="rw" Description="true/false" Type="Variable" Display="advanced" Required="false" Mask="false">true</Config>

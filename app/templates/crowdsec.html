@@ -4,16 +4,208 @@
 {% set mem = mem %}
 {% include 'partials/memory_state.html' %}
 
+<div class="tabs">
+  <a href="{{ url_for('crowdsec_page', view='blocks') }}" class="{% if view != 'setup' %}active{% endif %}">Auswertung</a>
+  <a href="{{ url_for('crowdsec_page', view='setup') }}" class="{% if view == 'setup' %}active{% endif %}">YAML / Listen</a>
+</div>
+
+{% if view == 'setup' %}
+  {% set setup = setup %}
+
+  <section class="block">
+    <h2 style="margin:0 0 6px;font-size:1.15rem;">CrowdSec YAML</h2>
+    <p class="hint" style="margin-top:0;">
+      Wichtige Dateien über die Web-Oberfläche anpassen. Neue Felder/Dateien können später in der Registry ergänzt werden.
+      Guard spricht nicht mit <code>cscli</code> — Collections installieren bleibt im CrowdSec-Container.
+      Nach dem Speichern den jeweiligen Container neu starten.
+    </p>
+  </section>
+
+  <form method="post" class="card" action="{{ url_for('crowdsec_page') }}">
+    <input type="hidden" name="action" value="paths">
+    <h2>Pfade im Guard-Container</h2>
+    <p class="hint">
+      In Unraid optionale Volumes setzen: CrowdSec-<code>/etc/crowdsec</code> →
+      <code>{{ setup.config_dir }}</code>, Bouncer-<code>config.yaml</code> →
+      <code>{{ setup.bouncer_config }}</code>.
+    </p>
+    <div class="row2">
+      <div>
+        <label>CrowdSec-Config-Ordner</label>
+        <input type="text" name="config_dir" value="{{ setup.config_dir }}" autocomplete="off">
+        {% if setup.config_dir_status.exists %}
+          <span class="path-pill ok">Ordner da</span>
+        {% else %}
+          <span class="path-pill miss">nicht gemountet</span>
+        {% endif %}
+      </div>
+      <div>
+        <label>Bouncer YAML</label>
+        <input type="text" name="bouncer_config" value="{{ setup.bouncer_config }}" autocomplete="off">
+        {% if setup.bouncer_status.is_file %}
+          <span class="path-pill ok">Datei da</span>
+        {% else %}
+          <span class="path-pill miss">nicht gemountet</span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="actions">
+      <button class="primary" type="submit">Pfade speichern</button>
+    </div>
+  </form>
+
+  {% for doc in setup.documents %}
+    <section class="block card cs-doc" id="doc-{{ doc.id }}">
+      <div class="cs-doc-head">
+        <h2>{{ doc.title }}</h2>
+        <div class="cs-pills">
+          {% if doc.is_file %}
+            <span class="path-pill ok">vorhanden</span>
+          {% elif doc.create_if_missing and doc.writable %}
+            <span class="path-pill miss">fehlt — Speichern legt an</span>
+          {% else %}
+            <span class="path-pill miss">nicht gemountet</span>
+          {% endif %}
+          {% if doc.is_file and not doc.writable %}
+            <span class="path-pill miss">nur lesen</span>
+          {% endif %}
+        </div>
+      </div>
+      <p class="hint" style="margin-top:0;">{{ doc.hint }}</p>
+      <p class="cs-meta mono">{{ doc.path }}{% if doc.mtime %} · {{ doc.mtime }}{% endif %}</p>
+      {% if doc.load_error %}
+        <p class="flash error">Lesen fehlgeschlagen: {{ doc.load_error }}</p>
+      {% endif %}
+
+      {% if not doc.is_file and not (doc.create_if_missing and doc.writable) %}
+        <p class="muted">Pfad nicht schreibbar. Volume mounten, dann Pfade speichern.</p>
+      {% else %}
+        {% if not doc.raw_only and doc.fields %}
+          <form method="post" action="{{ url_for('crowdsec_page') }}">
+            <input type="hidden" name="action" value="form">
+            <input type="hidden" name="doc" value="{{ doc.id }}">
+            {% for f in doc.fields %}
+              {% if f.kind == 'bool' %}
+                <label>
+                  <input type="checkbox" name="{{ f.name }}" {% if f.value %}checked{% endif %}>
+                  {{ f.label }}
+                </label>
+              {% elif f.kind == 'select' %}
+                <label>{{ f.label }}</label>
+                <select name="{{ f.name }}">
+                  {% for opt in f.options %}
+                    <option value="{{ opt }}" {% if f.value == opt %}selected{% endif %}>{{ opt }}</option>
+                  {% endfor %}
+                </select>
+              {% elif f.kind == 'password' %}
+                <label>{{ f.label }}{% if f.secret_set %} <span class="muted">(gesetzt — leer lassen zum Behalten)</span>{% endif %}</label>
+                <input type="password" name="{{ f.name }}" value="" autocomplete="new-password" placeholder="{% if f.secret_set %}••••••••{% endif %}">
+              {% elif f.kind in ('list', 'ip_cidr_list') %}
+                <label>{{ f.label }}</label>
+                <textarea name="{{ f.name }}" rows="5">{{ f.value }}</textarea>
+              {% else %}
+                <label>{{ f.label }}</label>
+                <input type="text" name="{{ f.name }}" value="{{ f.value }}" autocomplete="off">
+              {% endif %}
+              {% if f.hint %}<p class="hint">{{ f.hint }}</p>{% endif %}
+            {% endfor %}
+            <div class="actions">
+              <button class="primary" type="submit">Formular speichern</button>
+            </div>
+          </form>
+        {% endif %}
+
+        <details class="cs-raw" {% if doc.raw_only %}open{% endif %}>
+          <summary>Raw YAML</summary>
+          <form method="post" action="{{ url_for('crowdsec_page') }}">
+            <input type="hidden" name="action" value="raw">
+            <input type="hidden" name="doc" value="{{ doc.id }}">
+            <textarea class="yaml-sm" name="yaml_text">{{ doc.yaml_text }}</textarea>
+            <div class="actions">
+              <button class="primary" type="submit">YAML speichern</button>
+            </div>
+          </form>
+        </details>
+        <p class="hint">{{ doc.restart }}</p>
+      {% endif %}
+    </section>
+  {% endfor %}
+
+  <section class="block card">
+    <h2>Installierte Collections</h2>
+    <p class="hint">
+      Dateien in <code>collections/*.yaml</code>. Neue Listen: im CrowdSec-Container
+      <code>cscli collections install crowdsecurity/…</code> — später erweiterbar.
+    </p>
+    {% if setup.collections %}
+      <ul class="file-list">
+        {% for c in setup.collections %}
+          <li><code>{{ c.name }}</code> <span class="muted">{{ c.file }}</span></li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="muted">Keine Collections gefunden (Ordner nicht gemountet oder leer).</p>
+    {% endif %}
+  </section>
+
+  <section class="block card">
+    <h2>Weitere YAML-Dateien</h2>
+    <p class="hint">
+      Weitere Dateien unter dem CrowdSec-Config-Ordner (acquis.d, parsers, scenarios, …).
+      Zugangsdateien (<code>local_api_credentials.yaml</code> usw.) sind gesperrt.
+    </p>
+    {% if setup.extra_files %}
+      <form method="get" action="{{ url_for('crowdsec_page') }}" class="cs-extra-pick">
+        <input type="hidden" name="view" value="setup">
+        <label for="extra">Datei</label>
+        <div class="row2">
+          <select name="extra" id="extra" onchange="this.form.submit()">
+            {% for f in setup.extra_files %}
+              <option value="{{ f.rel }}" {% if setup.extra and setup.extra.rel == f.rel %}selected{% endif %}>{{ f.rel }}</option>
+            {% endfor %}
+          </select>
+          <div class="hist-go">
+            <button type="submit">Öffnen</button>
+          </div>
+        </div>
+      </form>
+      {% if setup.extra %}
+        <p class="cs-meta mono">{{ setup.extra.path }}{% if setup.extra.mtime %} · {{ setup.extra.mtime }}{% endif %}</p>
+        {% if setup.extra.load_error %}
+          <p class="flash error">{{ setup.extra.load_error }}</p>
+        {% elif setup.extra.is_file %}
+          <form method="post" action="{{ url_for('crowdsec_page') }}">
+            <input type="hidden" name="action" value="extra">
+            <input type="hidden" name="extra" value="{{ setup.extra.rel }}">
+            <textarea class="yaml-sm" name="yaml_text">{{ setup.extra.yaml_text }}</textarea>
+            <div class="actions">
+              <button class="primary" type="submit" {% if not setup.extra.writable %}disabled{% endif %}>Diese Datei speichern</button>
+            </div>
+          </form>
+        {% else %}
+          <p class="muted">Datei nicht lesbar.</p>
+        {% endif %}
+      {% endif %}
+    {% else %}
+      <p class="muted">Keine weiteren YAML-Dateien (Config-Ordner mounten).</p>
+    {% endif %}
+  </section>
+
+{% else %}
+  {% set data = data %}
+
 <section class="block">
   <h2 style="margin:0 0 6px;font-size:1.15rem;">CrowdSec-Blöcke</h2>
   <p class="hint" style="margin-top:0;">
     CrowdSec (Zoraxy-Add-in) weist bekannte schlechte IPs mit <strong>HTTP 403</strong> ab, bevor sie deine Apps erreichen.
     Guard alarmiert weiter bei Angriffen, die <em>durchkommen</em> (z. B. Exploit-Pfad mit HTTP 2xx).
     Diese CrowdSec-Blöcke selbst erzeugen <strong>keinen Pushover</strong> — wie andere 403er.
+    Bouncer-<code>log_level</code> und Listen unter <a href="{{ url_for('crowdsec_page', view='setup') }}">YAML / Listen</a>.
   </p>
 </section>
 
 <form class="card hist-filters" method="get" action="{{ url_for('crowdsec_page') }}">
+  <input type="hidden" name="view" value="blocks">
   <div class="hist-filter-row">
     <div>
       <label for="w">Zeitfenster</label>
@@ -62,10 +254,13 @@
       {% elif data.plugin_seen %}
         Plugin ist aktiv, im Fenster aber keine «Request blocked»-Zeilen.
         Wenn der Bouncer auf Log-Level <code>warning</code> steht, fehlen Info-Zeilen —
-        in der Plugin-<code>config.yaml</code> <code>log_level: info</code> setzen, dann History → Reset &amp; laden.
+        unter <a href="{{ url_for('crowdsec_page', view='setup') }}">YAML / Listen</a>
+        <code>log_level: info</code> setzen, dann History → Reset &amp; laden.
       {% else %}
         Noch keine CrowdSec-Plugin-Zeilen im Memory-Ring.
         Unter History «Reset &amp; laden», damit vorhandene <code>zr_*.log</code> nachgeladen werden.
+        Für Block-Logs: Bouncer auf <code>log_level: info</code>
+        (<a href="{{ url_for('crowdsec_page', view='setup') }}">YAML / Listen</a>).
       {% endif %}
     </p>
   </div>
@@ -160,4 +355,5 @@
   Quelle: <code>[plugin-manager]</code>-Zeilen «Request blocked» in <code>zr_*.log</code>.
   Die Client-IP kommt mit, wenn unmittelbar davor «Decision found for IP» steht (Plugin-Log-Level <code>info</code> oder <code>debug</code>).
 </p>
+{% endif %}
 {% endblock %}

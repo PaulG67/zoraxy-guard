@@ -342,6 +342,40 @@ code.logline {
   color: var(--muted);
 }
 .tabs a.active { background: #243145; color: var(--text); border-color: #3a4d66; }
+.tabs a { text-decoration: none; }
+.path-pill {
+  display: inline-block;
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin: 8px 6px 0 0;
+  border: 1px solid transparent;
+}
+.path-pill.ok {
+  background: rgba(62, 207, 142, 0.14);
+  border-color: rgba(62, 207, 142, 0.35);
+  color: var(--ok);
+}
+.path-pill.miss {
+  background: rgba(230, 184, 77, 0.14);
+  border-color: rgba(230, 184, 77, 0.4);
+  color: #f3d48a;
+}
+.cs-doc-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.cs-doc-head h2 { margin: 0; }
+.cs-meta { font-size: 0.78rem; color: var(--muted); margin: 0 0 12px; }
+.cs-raw { margin-top: 10px; }
+.cs-raw summary { cursor: pointer; color: var(--muted); font-size: 0.88rem; margin-bottom: 8px; }
+textarea.yaml-sm { min-height: 220px; font-family: var(--mono); font-size: 0.85rem; }
+.file-list { margin: 8px 0 0; padding-left: 1.2rem; }
+.file-list li { margin: 4px 0; }
+.cs-extra-pick { margin-bottom: 12px; }
 .login-box { max-width: 380px; margin: 12vh auto; }
 .hint { font-size: 0.82rem; color: var(--muted); margin-top: 6px; }
 section.block { margin-bottom: 18px; }

@@ -82,7 +82,7 @@ docker pull ghcr.io/paulg67/zoraxy-guard:latest
 |---|---|
 | **Status** | Memory-Banner, letzte Alarme, Prüfen-Link, Prüf-ID (Auswahl + Eingabe), Test-Alarm |
 | **History** | Zugriffe im Ring, Filter (Erfolg/Fail, Handlungsbedarf, Lärm), Prüfen bei Handlungsbedarf, Reset & laden |
-| **CrowdSec** | Blöcke des Zoraxy-CrowdSec-Add-ins (IPs, Pfade, Länder) |
+| **CrowdSec** | Blöcke des Zoraxy-CrowdSec-Add-ins; YAML/Listen (Bouncer, Engine, Whitelist, Collections) |
 | **Geprüft** | Stumme Links ohne Push, Filter nach Domain/Pfad/ID/Titel, «Alarmierung aktivieren» |
 | **Konfiguration** | Logs, Listen, Schwellwerte, **welche Alarme gepusht werden** |
 | **Listen** | lokale Blocklisten + Katalog-Update |
@@ -110,8 +110,22 @@ Unter **Geprüft** siehst du alle stummen Links. Filter: Domain, Pfad, Titel, Pr
 ### CrowdSec (Zoraxy-Add-in)
 
 CrowdSec blockt bekannte Angreifer-IPs mit HTTP 403, **bevor** sie deine Apps erreichen.  
-Guard pusht diese Blöcke nicht (wie andere 403er). Alarme kommen weiter, wenn etwas **durchkommt** (z. B. Exploit-Pfad mit 2xx).  
-Der Reiter **CrowdSec** wertet `plugin-manager`-Zeilen (`Request blocked`) aus. Dafür Plugin-Log-Level `info` (nicht nur `warning`) und ggf. History → Reset & laden.
+Guard pusht diese Blöcke nicht (wie andere 403er). Alarme kommen weiter, wenn etwas **durchkommt** (z. B. Exploit-Pfad mit 2xx).
+
+**Auswertung:** `plugin-manager`-Zeilen (`Request blocked`). Dafür Plugin-Log-Level `info` (nicht nur `warning`) und ggf. History → Reset & laden.
+
+**YAML / Listen:** Unter demselben Reiter die wichtigsten CrowdSec-Dateien in der GUI. Dafür optionale Volumes (Pfade gelten *im Guard-Container*):
+
+| Host (Unraid, typisch) | Guard |
+|---|---|
+| CrowdSec `/etc/crowdsec`, z. B. `/mnt/user/appdata/crowdsec` | `/crowdsec-config` |
+| Zoraxy-Bouncer `config.yaml` | `/crowdsec-bouncer/config.yaml` |
+
+Ohne Mount bleibt die Auswertung aktiv; die YAML-Karten zeigen «nicht gemountet».  
+Nach dem Speichern: Bouncer → Zoraxy/Plugin neu starten; Engine/Whitelist/acquis → CrowdSec neu starten.  
+Collections installieren weiterhin per `cscli` im CrowdSec-Container (die GUI listet vorhandene YAML). Neue Felder/Dateien lassen sich später in der Registry ergänzen.
+
+Env (optional): `CROWDSEC_CONFIG_DIR`, `CROWDSEC_BOUNCER_CONFIG`.
 
 ---
 
@@ -132,6 +146,9 @@ services:
       - /mnt/user/appdata/zoraxy/log:/logs:ro
       - /mnt/user/appdata/zoraxy-guard/config.yaml:/config/config.yaml
       - /mnt/user/appdata/zoraxy-guard/data:/data
+      # Optional CrowdSec YAML (GUI):
+      # - /mnt/user/appdata/crowdsec:/crowdsec-config
+      # - /mnt/user/appdata/zoraxy/plugins/zoraxy_crowdsec_bouncer/config.yaml:/crowdsec-bouncer/config.yaml
 ```
 
 Env (optional): `DISCORD_WEBHOOK`, `PUSHOVER_USER_KEY` + `PUSHOVER_API_TOKEN`, `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`, `MIN_SEVERITY`

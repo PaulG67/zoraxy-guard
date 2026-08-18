@@ -153,6 +153,12 @@ bad_user_agents:
   - curl/
   - wget/
 
+# Optional: CrowdSec YAML über den Reiter CrowdSec → YAML / Listen.
+# Im Container Ordner/Datei mounten (Unraid: optionale Pfade).
+crowdsec:
+  config_dir: /crowdsec-config                 # CrowdSec /etc/crowdsec
+  bouncer_config: /crowdsec-bouncer/config.yaml
+
 state_file: /data/state.json
 
 # Access history (Web-UI only, RAM ring — never written to disk)
