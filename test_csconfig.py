@@ -222,9 +222,27 @@ def test_hub_collections_and_simulation(tmp_path: Path):
     assert "crowdsecurity/linux" in ids
     linux = next(r for r in view["rows"] if r["id"] == "crowdsecurity/linux")
     assert linux["installed"]
-    ok, msg = cshub.install_collections(cfg, ["crowdsecurity/http-cve"])
+    assert linux["locked"]
+    (csdir / "hub" / "scenarios").mkdir(parents=True, exist_ok=True)
+    (csdir / "hub" / "collections" / "http-cve.yaml").write_text(
+        "name: crowdsecurity/http-cve\n"
+        "parsers: []\n"
+        "scenarios:\n  - crowdsecurity/http-cve-probe\n",
+        encoding="utf-8",
+    )
+    (csdir / "hub" / "scenarios" / "http-cve-probe.yaml").write_text(
+        "name: crowdsecurity/http-cve-probe\ndescription: probe cve\n",
+        encoding="utf-8",
+    )
+    ok, msg = cshub.install_collections(cfg, ["crowdsecurity/linux", "crowdsecurity/http-cve"])
     assert ok, msg
     assert (csdir / "collections" / "http-cve.yaml").is_file()
+    assert (csdir / "scenarios" / "http-cve-probe.yaml").is_file()
+    ok, msg = cshub.sync_collections(cfg, [])  # linux stays locked
+    assert ok, msg
+    assert (csdir / "collections" / "linux.yaml").is_file()
+    assert not (csdir / "collections" / "http-cve.yaml").is_file()
+    assert not (csdir / "scenarios" / "http-cve-probe.yaml").is_file()
     ok, msg = cshub.save_simulation(cfg, global_simulation=False, ban_enabled=[])
     assert ok, msg
     sim = cshub.load_simulation(cfg)

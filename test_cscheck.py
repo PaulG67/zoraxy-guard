@@ -103,3 +103,52 @@ def test_health_missing_but_bouncer_ok(tmp_path: Path):
     by_id = {r["id"]: r["status"] for r in report["rows"]}
     assert by_id["lapi_health"] == "warn"
     assert by_id["lapi_bouncer"] == "ok"
+
+
+def test_scan_plugin_lines(tmp_path: Path):
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "zr_app.log").write_text(
+        "[2026-08-18 12:00:00.000000] [plugin-manager] [system:info] "
+        "[Crowdsec Bouncer Plugin for Zoraxy:7811] Request blocked: /.env\n",
+        encoding="utf-8",
+    )
+    cfg = _cfg(tmp_path)
+    cfg["log"] = {"directory": str(logs), "pattern": "zr_*.log"}
+    disk = cscheck.scan_zoraxy_plugin_logs(cfg)
+    assert disk["file_count"] == 1
+    assert disk["plugin_lines"] == 1
+    assert disk["blocked_lines"] == 1
+
+    def fake_get(url, headers=None, timeout=4.0):
+        if url.endswith("/health"):
+            return 200, '{"status":"up"}'
+        return 200, "null"
+
+    report = cscheck.run_check(cfg, http_get=fake_get)
+    assert report["verdict"] == "ok"
+    by_id = {r["id"]: r["status"] for r in report["rows"]}
+    assert by_id["plugin_logs"] == "ok"
+    assert "fehlen noch" not in report["summary"]
+
+
+def test_scan_no_plugin_lines(tmp_path: Path):
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    (logs / "zr_app.log").write_text(
+        "[2026-08-18 12:00:00.000000] [router:http] [origin:x] [client: 1.2.3.4] GET / 200\n",
+        encoding="utf-8",
+    )
+    cfg = _cfg(tmp_path)
+    cfg["log"] = {"directory": str(logs), "pattern": "zr_*.log"}
+
+    def fake_get(url, headers=None, timeout=4.0):
+        if url.endswith("/health"):
+            return 200, '{"status":"up"}'
+        return 200, "null"
+
+    report = cscheck.run_check(cfg, http_get=fake_get)
+    by_id = {r["id"]: r["status"] for r in report["rows"]}
+    assert by_id["plugin_logs"] == "warn"
+    assert "fehlen noch" not in report["summary"]
+    assert by_id["lapi_bouncer"] == "ok"

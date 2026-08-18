@@ -67,24 +67,33 @@
 
   <section class="block card" id="cs-listen">
     <h2>Collections (Hub-Listen)
-      {{ help_btn('Eine Collection ist ein Bündel aus Parsern und Scenarios. CrowdSec akzeptiert nur Hub-Namen (crowdsecurity/…). Haken + Speichern kopiert fehlende Pakete aus hub/ in collections/parsers/scenarios. Deinstallieren: cscli collections remove im CrowdSec-Container. Community-IPs schaltest du unter Engine «Community-Blocklist».') }}
+      {{ help_btn('Haken an = einbinden (kopiert aus dem lokalen Hub). Haken aus + Speichern = entfernen (Collection und ungenutzte Parser/Scenarios). Standard-Collections sind ausgegraut und bleiben immer aktiv. Der Stand kommt jedes Mal frisch von Disk, nicht aus einem Cache. Danach CrowdSec neu starten. Community-IPs unter Engine «Community-Blocklist».') }}
     </h2>
-    <p class="hint">
-      Wie «Bekannte Threat-Datenbanken» unter Konfiguration — nur für CrowdSec.
+    <p class="hint" style="margin-top:0;">
+      Haken setzen oder entfernen, dann übernehmen. Die Liste zeigt, was jetzt in <code>collections/</code> liegt.
       {% if not (hub.collections and hub.collections.index_present) %}
-        Kein <code>hub/.index.json</code> — Installieren aus dem Hub geht erst nach <code>cscli hub update</code> im CrowdSec-Container (oder Hub-Ordner mit mounten).
+        Kein <code>hub/.index.json</code> — Einbinden aus dem Hub geht erst nach <code>cscli hub update</code> im CrowdSec-Container.
       {% endif %}
     </p>
     <form method="post" action="{{ url_for('crowdsec_page') }}">
       <input type="hidden" name="action" value="collections">
       <div class="checks">
         {% for c in (hub.collections.rows if hub.collections else []) %}
-          <label class="check {% if not c.recommended and not c.installed %}muted{% endif %}">
-            <input type="checkbox" name="collection" value="{{ c.id }}"
-              {% if c.installed %}checked{% endif %}>
+          <label class="check {% if c.locked %}locked{% elif not c.recommended and not c.installed %}muted{% endif %}">
+            {% if c.locked %}
+              <input type="hidden" name="collection" value="{{ c.id }}">
+              <input type="checkbox" checked disabled>
+            {% else %}
+              <input type="checkbox" name="collection" value="{{ c.id }}"
+                {% if c.installed %}checked{% endif %}>
+            {% endif %}
             <span>
               <code>{{ c.id }}</code>
-              {% if c.installed %}<small class="sev high">installiert</small>{% elif c.installable %}<small>aus Hub kopierbar</small>{% else %}<small>cscli nötig</small>{% endif %}
+              {% if c.locked %}<small class="sev high">Standard, fest</small>
+              {% if not c.installed %}<small>wird beim Übernehmen eingebunden</small>{% endif %}
+              {% elif c.installed %}<small class="sev high">eingebunden</small>
+              {% elif c.installable %}<small>aus Hub</small>
+              {% else %}<small>cscli / Hub nötig</small>{% endif %}
               {{ help_btn(c.description) }}
               <small>{{ c.title }}{% if c.description %} · {{ c.description }}{% endif %}</small>
             </span>
@@ -94,7 +103,7 @@
         {% endfor %}
       </div>
       <div class="actions">
-        <button class="primary" type="submit">Gewählte Collections einbinden</button>
+        <button class="primary" type="submit">Haken übernehmen</button>
       </div>
     </form>
   </section>
@@ -255,11 +264,11 @@
 {% elif view == 'check' %}
 <section class="block">
   <h2 style="margin:0 0 6px;font-size:1.15rem;">CrowdSec prüfen
-    {{ help_btn('Guard prüft die gemounteten YAML-Dateien und ruft die CrowdSec Local API auf: /health (ohne Key) und /v1/decisions mit dem Bouncer-Key. Das ist kein Scan und erzeugt keine Ban-Decision. Der Hostname crowdsec gilt oft nur für Zoraxy — Guard braucht ggf. die Unraid-IP und Port 8080.') }}
+    {{ help_btn('Guard prüft die gemounteten YAML-Dateien, die Zoraxy-Logs (zr_*.log: plugin-manager / CrowdSec) und die CrowdSec Local API: /health und /v1/decisions mit dem Bouncer-Key. Das ist kein Scan. Der Hostname crowdsec gilt oft nur für Zoraxy — Guard braucht ggf. die Unraid-IP und Port 8080.') }}
   </h2>
   <p class="hint" style="margin-top:0;">
     Ob LAPI erreichbar ist und der Bouncer-Key akzeptiert wird.
-    Plugin-Logs und 403-Blöcke kommen zusätzlich aus den Zoraxy-Logs.
+    Plugin-Zeilen kommen aus Zoraxy <code>zr_*.log</code> (<code>[plugin-manager]</code> + CrowdSec), nicht aus den CrowdSec-Engine-Logs.
   </p>
 </section>
 

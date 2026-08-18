@@ -11,11 +11,14 @@ from . import csconfig
 from .fileio import write_text
 
 # Collections CrowdSec accepts; Zoraxy sits in front of HTTP apps.
+# Locked IDs stay installed; the UI shows them checked and disabled.
+LOCKED_COLLECTION_IDS = frozenset({"crowdsecurity/linux"})
+
 CATALOG: Tuple[Dict[str, str], ...] = (
     {
         "id": "crowdsecurity/linux",
         "title": "Linux-Basis",
-        "description": "Syslog, GeoIP, Datum — Grundlage, nicht entfernen.",
+        "description": "Syslog, GeoIP, Datum — Grundlage, fest eingebunden.",
     },
     {
         "id": "crowdsecurity/base-http-scenarios",
@@ -79,6 +82,31 @@ def load_hub_index(cfg: Optional[dict]) -> dict:
     return {}
 
 
+def _canon_id(name: str) -> str:
+    name = str(name or "").strip()
+    if not name:
+        return ""
+    if "/" not in name:
+        return f"crowdsecurity/{name}"
+    return name
+
+
+def is_locked_collection(col_id: str) -> bool:
+    return _canon_id(col_id) in LOCKED_COLLECTION_IDS
+
+
+def installed_collection_names(cfg: Optional[dict]) -> List[str]:
+    """Canonical collection IDs currently on disk (fresh read)."""
+    names: List[str] = []
+    seen: Set[str] = set()
+    for item in csconfig.list_collections(cfg):
+        cid = _canon_id(str(item.get("name") or "") or Path(str(item.get("file") or "")).stem)
+        if cid and cid not in seen:
+            seen.add(cid)
+            names.append(cid)
+    return names
+
+
 def installed_collection_ids(cfg: Optional[dict]) -> Set[str]:
     ids: Set[str] = set()
     for item in csconfig.list_collections(cfg):
@@ -119,12 +147,14 @@ def collections_view(cfg: Optional[dict]) -> dict:
         seen.add(col_id)
         desc = description or _index_description(index, col_id)
         installable = bool(_hub_source_file(cfg, index, "collections", col_id))
+        locked = is_locked_collection(col_id)
         rows.append(
             {
                 "id": col_id,
                 "title": title or col_id,
                 "description": desc,
                 "installed": _collection_installed(installed, col_id),
+                "locked": locked,
                 "recommended": recommended,
                 "installable": installable,
             }
@@ -259,6 +289,102 @@ def _dest_for_item(cfg: Optional[dict], index: dict, kind: str, item_id: str, sr
     return root / "collections" / src.name
 
 
+_KIND_DIRS = {
+    "collections": "collections",
+    "parsers": "parsers",
+    "scenarios": "scenarios",
+    "postoverflows": "postoverflows",
+}
+
+
+def _load_mapping(path: Path) -> dict:
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        return data if isinstance(data, dict) else {}
+    except (OSError, yaml.YAMLError):
+        return {}
+
+
+def _item_yaml_name(path: Path) -> str:
+    data = _load_mapping(path)
+    return str(data.get("name") or "").strip() or path.stem
+
+
+def _kind_root(cfg: Optional[dict], kind: str) -> Path:
+    return Path(csconfig.config_dir(cfg)) / _KIND_DIRS[kind]
+
+
+def _paths_for_item(cfg: Optional[dict], kind: str, item_id: str) -> List[Path]:
+    root = _kind_root(cfg, kind)
+    if not root.is_dir():
+        return []
+    canon = _canon_id(item_id)
+    short = canon.split("/", 1)[-1]
+    found: List[Path] = []
+    for p in list(root.rglob("*.yaml")) + list(root.rglob("*.yml")):
+        if p.name.lower() in csconfig.CREDENTIAL_NAMES:
+            continue
+        stem = p.stem
+        name = _item_yaml_name(p)
+        if stem == short or _canon_id(name) == canon or name == item_id:
+            found.append(p)
+    return found
+
+
+def _collection_spec(cfg: Optional[dict], index: dict, col_id: str) -> dict:
+    for path in _paths_for_item(cfg, "collections", col_id):
+        spec = _load_mapping(path)
+        if spec:
+            return spec
+    src = _hub_source_file(cfg, index, "collections", col_id)
+    if src is not None:
+        return _load_mapping(src)
+    return {}
+
+
+def _closure(cfg: Optional[dict], index: dict, col_ids: Sequence[str]) -> Dict[str, Set[str]]:
+    out: Dict[str, Set[str]] = {k: set() for k in _KIND_DIRS}
+    stack = [_canon_id(x) for x in col_ids if _canon_id(x)]
+    seen: Set[str] = set()
+    while stack:
+        cid = stack.pop()
+        if cid in seen:
+            continue
+        seen.add(cid)
+        out["collections"].add(cid)
+        spec = _collection_spec(cfg, index, cid)
+        for kind in _KIND_DIRS:
+            deps = spec.get(kind) or []
+            if not isinstance(deps, list):
+                continue
+            for dep in deps:
+                dep_id = _canon_id(str(dep))
+                if not dep_id:
+                    continue
+                out[kind].add(dep_id)
+                if kind == "collections":
+                    stack.append(dep_id)
+    return out
+
+
+def _unlink_item(cfg: Optional[dict], kind: str, item_id: str) -> List[str]:
+    removed: List[str] = []
+    root = Path(csconfig.config_dir(cfg))
+    for path in _paths_for_item(cfg, kind, item_id):
+        if not csconfig.allowed_write_path(cfg, path):
+            continue
+        try:
+            rel = str(path.relative_to(root))
+        except ValueError:
+            rel = str(path)
+        try:
+            path.unlink()
+        except OSError:
+            continue
+        removed.append(rel.replace("\\", "/"))
+    return removed
+
+
 def _install_named(cfg: Optional[dict], index: dict, kind: str, item_id: str, seen: Set[str]) -> List[str]:
     key = f"{kind}:{item_id}"
     if key in seen:
@@ -299,42 +425,66 @@ def _install_named(cfg: Optional[dict], index: dict, kind: str, item_id: str, se
     return copied
 
 
-def install_collections(cfg: Optional[dict], wanted: Sequence[str]) -> Tuple[bool, str]:
+def sync_collections(cfg: Optional[dict], wanted: Sequence[str]) -> Tuple[bool, str]:
+    """Install checked collections from the Hub and remove unchecked ones (except locked)."""
     root = Path(csconfig.config_dir(cfg))
     if not root.is_dir():
         return False, "CrowdSec-Config-Ordner nicht gemountet."
     index = load_hub_index(cfg)
-    installed = installed_collection_ids(cfg)
+    wanted_ids = {_canon_id(x) for x in wanted if _canon_id(x)}
+    wanted_ids |= set(LOCKED_COLLECTION_IDS)
+
     copied: List[str] = []
     missing: List[str] = []
     seen: Set[str] = set()
-    for name in wanted:
-        name = str(name).strip()
-        if not name:
-            continue
-        if _collection_installed(installed, name):
+    installed_now = installed_collection_ids(cfg)
+    for name in sorted(wanted_ids):
+        if _collection_installed(installed_now, name):
             continue
         before = len(copied)
         copied.extend(_install_named(cfg, index, "collections", name, seen))
         if len(copied) == before:
             missing.append(name)
-    if copied and not missing:
-        return True, (
-            f"{len(copied)} Hub-Dateien nach {root} kopiert. "
-            "CrowdSec-Container neu starten."
-        )
+
+    keep = _closure(cfg, index, sorted(wanted_ids))
+    to_drop = [
+        cid
+        for cid in installed_collection_names(cfg)
+        if cid not in keep["collections"] and not is_locked_collection(cid)
+    ]
+    removed: List[str] = []
+    drop_tree = _closure(cfg, index, to_drop)
+    for kind in ("collections", "parsers", "scenarios", "postoverflows"):
+        for item_id in sorted(drop_tree.get(kind) or []):
+            if item_id in keep.get(kind) or (kind == "collections" and is_locked_collection(item_id)):
+                continue
+            removed.extend(_unlink_item(cfg, kind, item_id))
+
+    parts: List[str] = []
     if copied:
-        return True, (
-            f"{len(copied)} Dateien kopiert; nicht im lokalen Hub: {', '.join(missing)}. "
-            "Fehlende per cscli collections install … im CrowdSec-Container nachziehen, dann neu starten."
-        )
+        parts.append(f"{len(copied)} Datei(en) eingebunden")
+    if removed:
+        parts.append(f"{len(removed)} Datei(en) entfernt")
     if missing:
+        miss = ", ".join(missing)
+        if parts:
+            return True, (
+                f"{'; '.join(parts)}. Nicht im lokalen Hub: {miss}. "
+                "Fehlende per cscli hub update im CrowdSec-Container, dann Haken erneut setzen. "
+                "CrowdSec-Container neu starten."
+            )
         return False, (
             "Kein lokaler Hub zum Kopieren (hub/.index.json bzw. Hub-YAML). "
             "Im CrowdSec-Container: cscli hub update && cscli collections install "
-            + ", ".join(missing)
+            + miss
         )
-    return True, "Keine neuen Collections — alles Gewählte ist schon installiert."
+    if parts:
+        return True, f"{'; '.join(parts)}. CrowdSec-Container neu starten."
+    return True, "Keine Änderung — Haken entsprechen dem Stand auf Disk."
+
+
+def install_collections(cfg: Optional[dict], wanted: Sequence[str]) -> Tuple[bool, str]:
+    return sync_collections(cfg, wanted)
 
 
 def save_simulation(

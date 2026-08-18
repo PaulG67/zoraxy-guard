@@ -1,6 +1,9 @@
 """Live and local checks that CrowdSec (LAPI + bouncer) actually works."""
 from __future__ import annotations
 
+import glob
+import os
+import re
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 from urllib.parse import urljoin, urlparse
@@ -55,6 +58,63 @@ def lapi_url_from_cfg(cfg: Optional[dict], override: str = "") -> str:
         return stored
     bouncer = _load_bouncer(cfg)
     return normalize_lapi_url(str(bouncer.get("agent_url") or ""))
+
+
+RE_PLUGIN_MGR = re.compile(r"plugin-manager", re.I)
+RE_CROWDSEC_WORD = re.compile(r"crowd\s*sec", re.I)
+RE_REQUEST_BLOCKED = re.compile(r"Request blocked:", re.I)
+
+
+def log_location(cfg: Optional[dict]) -> tuple[str, str]:
+    log_cfg = (cfg or {}).get("log") if isinstance((cfg or {}).get("log"), dict) else {}
+    directory = str((log_cfg or {}).get("directory") or os.environ.get("LOG_DIR") or "/logs")
+    pattern = str((log_cfg or {}).get("pattern") or os.environ.get("LOG_PATTERN") or "zr_*.log")
+    return directory.rstrip("/\\"), pattern
+
+
+def _tail_text(path: Path, max_bytes: int) -> str:
+    try:
+        size = path.stat().st_size
+        with path.open("rb") as fh:
+            if size > max_bytes:
+                fh.seek(size - max_bytes)
+            return fh.read().decode("utf-8", "replace")
+    except OSError:
+        return ""
+
+
+def scan_zoraxy_plugin_logs(
+    cfg: Optional[dict],
+    *,
+    max_files: int = 4,
+    max_bytes: int = 512_000,
+) -> dict:
+    """Look at recent Zoraxy zr_*.log bytes for CrowdSec plugin-manager lines."""
+    directory, pattern = log_location(cfg)
+    paths = glob.glob(os.path.join(directory, pattern))
+    paths = [p for p in paths if os.path.isfile(p)]
+    paths.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+    plugin_lines = 0
+    blocked_lines = 0
+    scanned = 0
+    newest = paths[0] if paths else ""
+    for p in paths[:max_files]:
+        scanned += 1
+        for line in _tail_text(Path(p), max_bytes).splitlines():
+            if not (RE_PLUGIN_MGR.search(line) and RE_CROWDSEC_WORD.search(line)):
+                continue
+            plugin_lines += 1
+            if RE_REQUEST_BLOCKED.search(line):
+                blocked_lines += 1
+    return {
+        "directory": directory,
+        "pattern": pattern,
+        "file_count": len(paths),
+        "files_scanned": scanned,
+        "plugin_lines": plugin_lines,
+        "blocked_lines": blocked_lines,
+        "newest": newest,
+    }
 
 
 def _http_get(
@@ -182,12 +242,28 @@ def run_check(
     else:
         rows.append(_warn("log_level", "Bouncer Log-Level", "nicht gesetzt (Default oft warning)."))
 
-    if plugin_seen:
+    disk = scan_zoraxy_plugin_logs(cfg)
+    loc = f"{disk['directory']}/{disk['pattern']}"
+    if disk["plugin_lines"] or plugin_seen or history_blocks:
+        parts = []
+        if disk["plugin_lines"]:
+            extra = f", davon {disk['blocked_lines']} «Request blocked»" if disk["blocked_lines"] else ""
+            parts.append(
+                f"{disk['plugin_lines']} Plugin-Zeilen{extra} in den letzten {disk['files_scanned']} Datei(en)"
+            )
+        if plugin_seen:
+            parts.append(f"Live-Session: {plugin_lines} Zeilen, {plugin_blocks} Blöcke")
+        if history_blocks and not disk["plugin_lines"] and not plugin_seen:
+            parts.append(f"{history_blocks} Blöcke im Memory-Ring")
+        detail = "; ".join(parts) if parts else "Plugin-Zeilen gefunden"
+        rows.append(_ok("plugin_logs", "Zoraxy-Plugin in den Logs", f"{detail}. Quelle: {loc}"))
+    elif disk["file_count"] == 0:
         rows.append(
-            _ok(
+            _warn(
                 "plugin_logs",
                 "Zoraxy-Plugin in den Logs",
-                f"{plugin_lines} Plugin-Zeilen, {plugin_blocks} Blöcke in dieser Session.",
+                f"Keine Dateien unter {loc}. Guard liest nur Zoraxy-Logs (nicht CrowdSec /var/log). "
+                "Unter Konfiguration den Log-Ordner prüfen (Unraid: …/zoraxy/log).",
             )
         )
     else:
@@ -195,7 +271,10 @@ def run_check(
             _warn(
                 "plugin_logs",
                 "Zoraxy-Plugin in den Logs",
-                "Noch keine CrowdSec-Plugin-Zeilen. History → Reset & laden, Log-Level info.",
+                f"{disk['file_count']} Datei(en) unter {loc}, aber keine [plugin-manager]-Zeilen mit CrowdSec "
+                "im Dateiende. Das sind nicht die CrowdSec-Engine-Logs. Oft: Bouncer log_level warning "
+                "(dann fehlen Info-Zeilen), oder das Plugin schreibt nicht in zr_*.log. "
+                "CrowdSec kann trotzdem blocken — LAPI-Check zählt dafür.",
             )
         )
 
@@ -289,13 +368,12 @@ def run_check(
         else:
             rows.append(_fail("lapi_bouncer", "Bouncer-API (Key)", "Kein API-Key — Request übersprungen."))
 
+    disk_seen = bool(disk["plugin_lines"] or plugin_seen or history_blocks)
     verdict = _verdict(rows)
     if verdict == "ok":
         summary = "CrowdSec antwortet: LAPI erreichbar, Bouncer-Key gültig."
-        if plugin_seen:
-            summary += " Das Zoraxy-Plugin schreibt Logs."
-        else:
-            summary += " Plugin-Logs fehlen noch — Zoraxy neu starten oder History nachladen."
+        if disk_seen:
+            summary += " Das Zoraxy-Plugin ist in zr_*.log sichtbar."
     elif verdict == "warn":
         summary = "Teilweise ok. Gelbe Punkte prüfen — oft Log-Level, Mount oder noch keine Blöcke."
     else:

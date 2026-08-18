@@ -122,7 +122,7 @@ def _crowdsec_setup_post(config_path: str):
             flash(msg, "ok" if ok else "error")
         elif action == "collections":
             wanted = request.form.getlist("collection")
-            ok, msg = cshub.install_collections(cfg, wanted)
+            ok, msg = cshub.sync_collections(cfg, wanted)
             flash(msg, "ok" if ok else "error")
         elif action == "scenarios":
             ok, msg = cshub.save_simulation(

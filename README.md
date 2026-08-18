@@ -129,7 +129,7 @@ Guard pusht diese Blöcke nicht (wie andere 403er). Alarme kommen weiter, wenn e
 
 **Prüfen:** Reiter CrowdSec → Prüfen → **Jetzt prüfen**. Guard testet Mounts, Bouncer-YAML und die Local API (`/health` plus `/v1/decisions` mit dem Bouncer-Key). Wenn der Hostname `crowdsec` aus Guard nicht auflöst: LAPI-URL `http://UNRAID-IP:8080` (LAPI muss erreichbar sein).
 
-**YAML / Listen:** Collections (Hub) anhaken wie Threat-Listen unter Konfiguration; Community-/Console-Blocklists; Scenarios mit/ohne Ban; Whitelist; Engine; Profile. **?** erklärt jedes Feld.
+**YAML / Listen:** Collections per Haken einbinden oder entfernen (`linux` bleibt fest); Community-/Console-Blocklists; Scenarios mit/ohne Ban; Whitelist; Engine; Profile. **?** erklärt jedes Feld.
 
 | Host (Unraid, typisch) | Guard |
 |---|---|
@@ -138,7 +138,7 @@ Guard pusht diese Blöcke nicht (wie andere 403er). Alarme kommen weiter, wenn e
 
 Ohne Mount bleibt die Auswertung aktiv; die YAML-Karten zeigen «nicht gemountet».  
 Nach dem Speichern: Bouncer → Zoraxy/Plugin neu starten; Engine/Listen/acquis → CrowdSec neu starten.  
-Collections: GUI kopiert aus dem lokalen Hub (`hub/.index.json`); sonst `cscli collections install …` im CrowdSec-Container.
+Collections: Haken an/aus in der GUI (Stand von Disk); `crowdsecurity/linux` ist fest. Ohne lokalen Hub (`hub/.index.json`): `cscli hub update` im CrowdSec-Container.
 
 Env (optional): `CROWDSEC_CONFIG_DIR`, `CROWDSEC_BOUNCER_CONFIG`.
 

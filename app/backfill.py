@@ -122,6 +122,13 @@ def _run_backfill(runtime: "Runtime", hours: int) -> None:
             except OSError as exc:
                 log.warning("Backfill read %s: %s", fpath, exc)
 
+        with runtime.lock:
+            live = runtime.crowdsec
+            if cs_state.seen_plugin:
+                live.seen_plugin = True
+            live.lines_seen = max(int(live.lines_seen), int(cs_state.lines_seen))
+            live.blocks_parsed = max(int(live.blocks_parsed), int(cs_state.blocks_parsed))
+
         msg = (
             f"Fertig: {loaded} Requests aus {len(files)} Datei(en) "
             f"({hours}h, {lines_read} Zeilen gelesen, {skipped_old} übersprungen)."

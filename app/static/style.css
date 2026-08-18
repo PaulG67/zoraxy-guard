@@ -140,6 +140,8 @@ textarea.yaml { min-height: 480px; }
   padding: 8px 10px;
 }
 .check input { margin-top: 3px; }
+.check.locked { opacity: 0.78; }
+.check.locked input { cursor: not-allowed; }
 .check small { display: block; color: var(--muted); font-size: 0.75rem; margin-top: 2px; }
 .notify-modes {
   display: flex;
