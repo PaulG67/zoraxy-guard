@@ -251,6 +251,11 @@ def run(config_path: str) -> None:
                 runtime.last_line_at = now
             for line in lines:
                 event = parse_line(line)
+                cs = runtime.crowdsec.ingest(event)
+                if cs is not None:
+                    hist.record(cs)
+                    hist.mark_live_ingress()
+                    continue
                 self_check = runtime.selfchecks.matches(event.origin, event.path)
                 hist.record(event, self_check=self_check)
                 hist.mark_live_ingress()

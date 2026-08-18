@@ -39,6 +39,7 @@ BLOCKED_ROUTERS = frozenset(
         "geoblacklist",
         "access",
         "block",
+        "crowdsec",
     }
 )
 
@@ -62,7 +63,7 @@ def is_blocked(event: AccessEvent) -> bool:
         return True
     if router in BLOCKED_ROUTERS:
         return True
-    if "blacklist" in router or "block" in router:
+    if "blacklist" in router or "block" in router or "crowdsec" in router:
         return True
     return False
 
@@ -80,6 +81,8 @@ def is_failed(event: AccessEvent) -> bool:
 def block_reasons(event: AccessEvent, threat_list: Optional[str] = None) -> list[str]:
     reasons: list[str] = []
     router = (event.router or "").lower()
+    if "crowdsec" in router:
+        reasons.append("CrowdSec Bouncer")
     if "blacklist" in router or router in ("ipblacklist", "geoip", "geoblacklist"):
         reasons.append(f"Router: {event.router or router}")
     if event.status == 403:
@@ -449,5 +452,98 @@ class AccessHistory:
                 "samples": blocked_samples,
             },
             "geo_stats": geo.stats() if geo else {},
+            "buffer": buf,
+        }
+
+    def snapshot_crowdsec(
+        self,
+        window: str = "1h",
+        q: str = "",
+        geo: Optional["GeoCache"] = None,
+        threats: Optional["ThreatLists"] = None,
+        sample_limit: int = 80,
+    ) -> dict[str, Any]:
+        """Stats for CrowdSec bouncer blocks in the memory ring."""
+        sec = WINDOWS.get(window, 3600)
+        now = time.time()
+        cutoff = now - sec
+        qn = q.strip().lower()
+        with self._lock:
+            self._prune_locked(now - MAX_WINDOW_SEC)
+            events = [
+                e
+                for e in self._events
+                if e.ts >= cutoff and "crowdsec" in (e.router or "").lower()
+            ]
+        buf = self.buffer_info()
+        if qn:
+            events = [
+                e
+                for e in events
+                if qn in e.client.lower()
+                or qn in e.origin.lower()
+                or qn in e.path.lower()
+            ]
+
+        clients = {e.client for e in events if e.client not in ("?", "-", "")}
+        geo_map: dict[str, dict] = {}
+        if geo and clients:
+            geo_map = geo.resolve(clients)
+
+        def ginfo(ip: str) -> dict:
+            return geo_map.get(ip) or {
+                "country": "—",
+                "country_code": "",
+                "org": "—",
+                "asn": "",
+                "as_full": "",
+                "label": "—",
+            }
+
+        by_ip: DefaultDict[str, int] = defaultdict(int)
+        by_path: DefaultDict[str, int] = defaultdict(int)
+        by_country: DefaultDict[str, int] = defaultdict(int)
+        by_org: DefaultDict[str, int] = defaultdict(int)
+        for e in events:
+            by_ip[e.client] += 1
+            by_path[e.path or "/"] += 1
+            gi = ginfo(e.client)
+            cc = gi.get("country_code") or gi.get("country") or "?"
+            by_country[str(cc)] += 1
+            org = gi.get("org") or "—"
+            by_org[str(org)[:60]] += 1
+
+        samples = []
+        for e in reversed(events[-sample_limit:]):
+            tl = self._threat_for(e.client, threats)
+            samples.append(
+                {
+                    "ts": e.ts,
+                    "client": e.client,
+                    "origin": e.origin,
+                    "method": e.method,
+                    "path": e.path,
+                    "status": e.status,
+                    "router": e.router,
+                    "ua": e.ua,
+                    "geo": ginfo(e.client),
+                    "threat_list": tl,
+                    "reasons": block_reasons(e, tl),
+                }
+            )
+        known_ips = [ip for ip in by_ip if ip not in ("?", "-", "")]
+        return {
+            "window": window,
+            "window_sec": sec,
+            "query": q,
+            "now": now,
+            "total": len(events),
+            "unique_ips": len(known_ips),
+            "unique_paths": len(by_path),
+            "by_country": sorted(by_country.items(), key=lambda x: -x[1])[:12],
+            "by_org": sorted(by_org.items(), key=lambda x: -x[1])[:12],
+            "by_ip": sorted(by_ip.items(), key=lambda x: -x[1])[:20],
+            "by_path": sorted(by_path.items(), key=lambda x: -x[1])[:20],
+            "samples": samples,
             "buffer": buf,
         }

@@ -97,6 +97,8 @@ class Detector:
     def process(self, event: LogEvent) -> List[Alert]:
         if event.kind != "request":
             return []
+        if (event.router or "").lower() == "crowdsec":
+            return []
         ip = self._client_ip(event)
         if not ip:
             return []

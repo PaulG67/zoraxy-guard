@@ -10,6 +10,7 @@ import time
 from typing import TYPE_CHECKING, List
 
 from .parser import parse_line
+from .crowdsec import CrowdSecLogState
 
 if TYPE_CHECKING:
     from .runtime import Runtime
@@ -80,6 +81,7 @@ def _run_backfill(runtime: "Runtime", hours: int) -> None:
         lines_read = 0
         loaded = 0
         skipped_old = 0
+        cs_state = CrowdSecLogState()
 
         for fpath in files:
             try:
@@ -98,7 +100,10 @@ def _run_backfill(runtime: "Runtime", hours: int) -> None:
                                 )
 
                         event = parse_line(line)
-                        if event.kind != "request":
+                        cs = cs_state.ingest(event)
+                        if cs is not None:
+                            event = cs
+                        elif event.kind != "request":
                             continue
                         # Only in-window timestamps (no blind bulk of undated lines)
                         if event.timestamp is None:

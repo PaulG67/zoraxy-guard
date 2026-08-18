@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block title %}CrowdSec · {{ app_name }}{% endblock %}
+{% block content %}
+{% set mem = mem %}
+{% include 'partials/memory_state.html' %}
+
+<section class="block">
+  <h2 style="margin:0 0 6px;font-size:1.15rem;">CrowdSec-Blöcke</h2>
+  <p class="hint" style="margin-top:0;">
+    CrowdSec (Zoraxy-Add-in) weist bekannte schlechte IPs mit <strong>HTTP 403</strong> ab, bevor sie deine Apps erreichen.
+    Guard alarmiert weiter bei Angriffen, die <em>durchkommen</em> (z. B. Exploit-Pfad mit HTTP 2xx).
+    Diese CrowdSec-Blöcke selbst erzeugen <strong>keinen Pushover</strong> — wie andere 403er.
+  </p>
+</section>
+
+<form class="card hist-filters" method="get" action="{{ url_for('crowdsec_page') }}">
+  <div class="hist-filter-row">
+    <div>
+      <label for="w">Zeitfenster</label>
+      <select name="w" id="w" onchange="this.form.submit()">
+        {% for key, label in [('1h','1 Stunde'),('6h','6 Stunden'),('12h','12 Stunden'),('24h','24 Stunden')] %}
+          <option value="{{ key }}" {% if data.window == key %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="hist-search">
+      <label for="q">Filter</label>
+      <input type="text" name="q" id="q" value="{{ data.query }}" placeholder="IP, Pfad…" autocomplete="off">
+    </div>
+    <div class="hist-go">
+      <label>&nbsp;</label>
+      <button type="submit" class="primary">Anzeigen</button>
+    </div>
+  </div>
+</form>
+
+<div class="grid stats">
+  <div class="card">
+    <div class="stat-label">CrowdSec-Blöcke</div>
+    <div class="stat-value {% if data.total %}text-warn{% endif %}">{{ data.total }}</div>
+  </div>
+  <div class="card">
+    <div class="stat-label">IPs</div>
+    <div class="stat-value">{{ data.unique_ips }}</div>
+  </div>
+  <div class="card">
+    <div class="stat-label">Pfade</div>
+    <div class="stat-value">{{ data.unique_paths }}</div>
+  </div>
+  <div class="card">
+    <div class="stat-label">Plugin-Zeilen (Session)</div>
+    <div class="stat-value">{{ data.plugin_lines }}</div>
+    <div class="hint">{% if data.plugin_seen %}Bouncer sichtbar{% else %}noch keine Plugin-Logs{% endif %}</div>
+  </div>
+</div>
+
+{% if data.total == 0 %}
+  <div class="card">
+    <p class="muted" style="margin:0;">
+      {% if data.query %}
+        Keine Treffer für «{{ data.query }}».
+      {% elif data.plugin_seen %}
+        Plugin ist aktiv, im Fenster aber keine «Request blocked»-Zeilen.
+        Wenn der Bouncer auf Log-Level <code>warning</code> steht, fehlen Info-Zeilen —
+        in der Plugin-<code>config.yaml</code> <code>log_level: info</code> setzen, dann History → Reset &amp; laden.
+      {% else %}
+        Noch keine CrowdSec-Plugin-Zeilen im Memory-Ring.
+        Unter History «Reset &amp; laden», damit vorhandene <code>zr_*.log</code> nachgeladen werden.
+      {% endif %}
+    </p>
+  </div>
+{% else %}
+  <section class="block">
+    <div class="card blocked-panel">
+      <h3 style="margin:0 0 10px;">Auswertung</h3>
+      <div class="blocked-grid">
+        <div>
+          <div class="stat-label">Nach Land</div>
+          <div class="chip-list">
+            {% for c, n in data.by_country %}
+              <span class="chip">{{ c }} <small>×{{ n }}</small></span>
+            {% else %}
+              <span class="muted">—</span>
+            {% endfor %}
+          </div>
+        </div>
+        <div>
+          <div class="stat-label">Nach Organisation / ISP</div>
+          <div class="chip-list">
+            {% for o, n in data.by_org %}
+              <span class="chip" title="{{ o }}">{{ o[:36] }}{% if o|length > 36 %}…{% endif %} <small>×{{ n }}</small></span>
+            {% else %}
+              <span class="muted">—</span>
+            {% endfor %}
+          </div>
+        </div>
+        <div>
+          <div class="stat-label">Top IPs</div>
+          <div class="chip-list">
+            {% for ip, n in data.by_ip %}
+              <span class="chip mono">{{ ip }} <small>×{{ n }}</small></span>
+            {% endfor %}
+          </div>
+        </div>
+        <div>
+          <div class="stat-label">Top Pfade</div>
+          <div class="chip-list">
+            {% for p, n in data.by_path %}
+              <span class="chip mono" title="{{ p }}">{{ p[:42] }}{% if p|length > 42 %}…{% endif %} <small>×{{ n }}</small></span>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="hist-table-wrap card" style="padding:0; overflow:auto; margin-top:14px;">
+    <table class="hist-table">
+      <thead>
+        <tr>
+          <th>Zeit</th>
+          <th>Client</th>
+          <th>Land</th>
+          <th>Organisation</th>
+          <th>Pfad</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in data.samples %}
+          <tr class="row-blocked">
+            <td class="mono nowrap">{{ time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(s.ts)) }}</td>
+            <td class="mono">{{ s.client }}</td>
+            <td>
+              {% if s.geo.country_code %}
+                <span class="cc">{{ s.geo.country_code }}</span>
+              {% endif %}
+              <span class="muted">{{ s.geo.country }}</span>
+            </td>
+            <td class="org-cell" title="{{ s.geo.as_full or s.geo.org }}">
+              {% if s.geo.asn %}<span class="mono muted">{{ s.geo.asn }}</span> {% endif %}
+              {{ s.geo.org }}
+            </td>
+            <td class="mono path-cell" title="{{ s.path }}">{{ s.path }}</td>
+            <td>
+              <span class="st-badge st-4">{{ s.status }}</span>
+              <div class="muted mono" style="font-size:0.75rem;">crowdsec</div>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if data.total > data.samples|length %}
+    <p class="hint">Zeigt die neuesten {{ data.samples|length }} von {{ data.total }} Blöcken.</p>
+  {% endif %}
+{% endif %}
+
+<p class="hint">
+  Quelle: <code>[plugin-manager]</code>-Zeilen «Request blocked» in <code>zr_*.log</code>.
+  Die Client-IP kommt mit, wenn unmittelbar davor «Decision found for IP» steht (Plugin-Log-Level <code>info</code> oder <code>debug</code>).
+</p>
+{% endblock %}

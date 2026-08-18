@@ -167,7 +167,7 @@ def assess_access(
         tags.append("empty-ua")
 
     blocked_router = any(
-        x in router_l for x in ("blacklist", "block", "geoip", "access")
+        x in router_l for x in ("blacklist", "block", "geoip", "access", "crowdsec")
     )
     probe = _path_matches(path, PROBE_FRAGMENTS)
     hard = _path_matches(path, HARD_LEAK_FRAGMENTS)

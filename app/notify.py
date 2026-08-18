@@ -22,7 +22,7 @@ NOTIFY_KINDS: list[tuple[str, str, str]] = [
 DEFAULT_NOTIFY_KINDS = [k[0] for k in NOTIFY_KINDS]
 NOTIFY_MODES = ("action", "action_watch", "severity")
 BLOCKED_STATUSES = frozenset({401, 403, 429, 451})
-BLOCKED_ROUTERS = frozenset({"blacklist", "whitelist"})
+BLOCKED_ROUTERS = frozenset({"blacklist", "whitelist", "crowdsec"})
 
 NOTIFY_MODE_LABELS = {
     "action": "nur Handlungsbedarf",

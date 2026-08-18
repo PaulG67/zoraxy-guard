@@ -327,6 +327,33 @@ def create_app(config_path: str) -> Flask:
             api_status_url=url_for("api_status"),
         )
 
+    @app.route("/crowdsec")
+    @login_required
+    def crowdsec_page():
+        if not rt.RUNTIME:
+            flash("Runtime nicht bereit.", "error")
+            return redirect(url_for("dashboard"))
+        window = (request.args.get("w") or "1h").strip().lower()
+        if window not in ("1h", "6h", "12h", "24h"):
+            window = "1h"
+        q = (request.args.get("q") or "").strip()
+        data = rt.RUNTIME.history.snapshot_crowdsec(
+            window=window,
+            q=q,
+            geo=rt.RUNTIME.geo,
+            threats=rt.RUNTIME.threats,
+        )
+        data["plugin_seen"] = bool(rt.RUNTIME.crowdsec.seen_plugin)
+        data["plugin_lines"] = int(rt.RUNTIME.crowdsec.lines_seen)
+        data["plugin_blocks"] = int(rt.RUNTIME.crowdsec.blocks_parsed)
+        mem = rt.RUNTIME.memory_state()
+        return render_template(
+            "crowdsec.html",
+            data=data,
+            mem=mem,
+            time=time,
+        )
+
     @app.route("/history/backfill", methods=["POST"])
     @login_required
     def history_backfill():

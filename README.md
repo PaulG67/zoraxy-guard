@@ -82,6 +82,7 @@ docker pull ghcr.io/paulg67/zoraxy-guard:latest
 |---|---|
 | **Status** | Memory-Banner, letzte Alarme, Prüfen-Link, Prüf-ID (Auswahl + Eingabe), Test-Alarm |
 | **History** | Zugriffe im Ring, Filter (Erfolg/Fail, Handlungsbedarf, Lärm), Prüfen bei Handlungsbedarf, Reset & laden |
+| **CrowdSec** | Blöcke des Zoraxy-CrowdSec-Add-ins (IPs, Pfade, Länder) |
 | **Geprüft** | Stumme Links ohne Push, Filter nach Domain/Pfad/ID/Titel, «Alarmierung aktivieren» |
 | **Konfiguration** | Logs, Listen, Schwellwerte, **welche Alarme gepusht werden** |
 | **Listen** | lokale Blocklisten + Katalog-Update |
@@ -105,6 +106,12 @@ Unter **Geprüft** siehst du alle stummen Links. Filter: Domain, Pfad, Titel, Pr
 **Alarmierung aktivieren** nimmt die Prüfung zurück — derselbe Vorgang kann wieder gepusht werden.
 
 «Prüfen ↗» in Status/History: nächster Aufruf auf Domain+Pfad wird einmalig ignoriert (kein False-Positive durch dich selbst).
+
+### CrowdSec (Zoraxy-Add-in)
+
+CrowdSec blockt bekannte Angreifer-IPs mit HTTP 403, **bevor** sie deine Apps erreichen.  
+Guard pusht diese Blöcke nicht (wie andere 403er). Alarme kommen weiter, wenn etwas **durchkommt** (z. B. Exploit-Pfad mit 2xx).  
+Der Reiter **CrowdSec** wertet `plugin-manager`-Zeilen (`Request blocked`) aus. Dafür Plugin-Log-Level `info` (nicht nur `warning`) und ggf. History → Reset & laden.
 
 ---
 

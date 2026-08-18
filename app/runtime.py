@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, Deque, Dict, List, Optional
 
 from .acks import AckStore, DEFAULT_ACK_PATH, normalize_review_id, review_id
+from .crowdsec import CrowdSecLogState
 from .notify import notify_summary
 from .selfcheck import CheckExpectStore
 from .alerter import Alerter
@@ -185,6 +186,7 @@ class Runtime:
     )
     acks: AckStore = field(default_factory=lambda: AckStore(DEFAULT_ACK_PATH))
     selfchecks: CheckExpectStore = field(default_factory=CheckExpectStore)
+    crowdsec: CrowdSecLogState = field(default_factory=CrowdSecLogState)
 
     def request_reload(self) -> None:
         with self.lock:
