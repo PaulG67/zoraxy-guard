@@ -77,6 +77,12 @@ def _risk_for_alert(alert: Alert):
     )
 
 
+def is_muted(alerts_cfg: Optional[dict] = None) -> bool:
+    """True if the operator paused all push channels."""
+    cfg = alerts_cfg or {}
+    return bool(cfg.get("muted"))
+
+
 def notify_summary(alerts_cfg: Optional[dict] = None) -> str:
     cfg = alerts_cfg or {}
     mode = normalize_mode(cfg.get("notify_mode"))
@@ -97,9 +103,10 @@ def notify_summary(alerts_cfg: Optional[dict] = None) -> str:
             extras.append(f"Sammel {max(1, round(window / 60))} min")
         else:
             extras.append(f"Sammel {window}s")
-    if extras:
-        return f"{label} · {', '.join(extras)}"
-    return label
+    text = f"{label} · {', '.join(extras)}" if extras else label
+    if is_muted(cfg):
+        return f"PAUSIERT · {text}"
+    return text
 
 
 def should_notify(alert: Alert, alerts_cfg: Optional[dict] = None, *, acked: bool = False) -> bool:

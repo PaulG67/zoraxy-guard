@@ -5,6 +5,13 @@
 {% set mem = snap %}
 {% include 'partials/memory_state.html' %}
 
+<form method="post" action="{{ url_for('action_mute_alerts') }}" class="card mute-card{% if snap.alerts_muted %} is-muted{% endif %}" id="mute-card">
+  <label class="check" style="margin:0;">
+    <input type="checkbox" name="alerts_muted" id="alerts-muted-toggle" {% if snap.alerts_muted %}checked{% endif %} onchange="this.form.submit()">
+    <span>Alarmierung pausieren <small>Kein Push (Pushover/Discord/Telegram), bis du den Haken wieder entfernst. Überlebt Container-Neustarts. History bleibt aktiv. Test-Alarm geht trotzdem raus.</small></span>
+  </label>
+</form>
+
 <div class="soft-refresh-bar card">
   <div class="soft-refresh-row">
     <button type="button" class="primary" id="btn-soft-refresh">Status aktualisieren</button>

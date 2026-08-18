@@ -194,6 +194,18 @@ class Runtime:
         with self.lock:
             self.lists_reload_requested = True
 
+    def set_alerts_muted(self, muted: bool) -> None:
+        muted = bool(muted)
+        with self.lock:
+            alerts = self.cfg.setdefault("alerts", {})
+            if not isinstance(alerts, dict):
+                alerts = {}
+                self.cfg["alerts"] = alerts
+            alerts["muted"] = muted
+            alt = self.alerter
+        if alt is not None:
+            alt.set_muted(muted)
+
     def note_alert(self, alert: Alert) -> None:
         record = build_alert_record(alert, self.threats)
         fp = alert.fingerprint
@@ -332,6 +344,7 @@ class Runtime:
             except Exception:
                 min_sev = "medium"
                 notify_label = "nur Handlungsbedarf"
+                alerts_cfg = {}
 
         age_line = (now - last_line) if last_line else None
         if last_line and age_line is not None and age_line < 120:
@@ -375,6 +388,7 @@ class Runtime:
                 "alerts_sent": alerts_sent,
                 "min_severity": min_sev,
                 "notify_summary": notify_label,
+                "alerts_muted": bool(alerts_cfg.get("muted")),
                 "watching": watching,
             },
             "memory": {
@@ -470,6 +484,7 @@ class Runtime:
                 "history_buffer": self.history.buffer_info(),
                 "min_severity": mem["process"]["min_severity"],
                 "notify_summary": mem["process"].get("notify_summary") or "",
+                "alerts_muted": bool(mem["process"].get("alerts_muted")),
                 "acked_count": self.acks.count(),
                 "open_review_ids": open_ids,
             }

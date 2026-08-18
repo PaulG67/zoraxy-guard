@@ -36,6 +36,11 @@
       {% endif %}
     {% endwith %}
 
+    <div class="flash warn mute-banner" id="mute-banner" style="{% if not alerts_muted %}display:none{% endif %}">
+      Alarmierung pausiert — kein Pushover, Discord oder Telegram. History und Geprüft laufen weiter.
+      Haken auf der Status-Seite entfernen, um wieder zu alarmieren.
+    </div>
+
     {% block content %}{% endblock %}
   </div>
   <script src="{{ url_for('static', filename='check.js') }}"></script>

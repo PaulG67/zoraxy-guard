@@ -110,6 +110,11 @@
     <h2>Alarme</h2>
     <p class="hint">Steuert Pushover, Discord, Telegram und Webhook — nicht die History. Standard: nur Fälle mit Handlungsbedarf, keine geblockten 403-Scanner, keine bereits geprüften Fingerprints.</p>
 
+    <label class="check" style="margin-top:4px;">
+      <input type="checkbox" name="alerts_muted" {% if cfg.get('alerts', {}).get('muted') %}checked{% endif %}>
+      <span>Alarmierung pausieren <small>Temporär kein Push. Derselbe Haken steht auf der Status-Seite. History bleibt vollständig.</small></span>
+    </label>
+
     <label>Wann senden?</label>
     <div class="notify-modes">
       {% set mode = cfg.get('alerts', {}).get('notify_mode', 'action') %}

@@ -97,7 +97,12 @@ def create_app(config_path: str) -> Flask:
 
     @app.context_processor
     def inject_globals():
-        return {"app_name": "Zoraxy Guard", "has_password": bool(password)}
+        muted = False
+        if rt.RUNTIME and isinstance(rt.RUNTIME.cfg, dict):
+            alerts = rt.RUNTIME.cfg.get("alerts") or {}
+            if isinstance(alerts, dict):
+                muted = bool(alerts.get("muted"))
+        return {"app_name": "Zoraxy Guard", "has_password": bool(password), "alerts_muted": muted}
 
     @app.route("/login", methods=["GET", "POST"])
     def login():
@@ -414,6 +419,7 @@ def create_app(config_path: str) -> Flask:
                     a["notify_mode"] = normalize_mode(request.form.get("notify_mode", "action"))
                     a["notify_skip_acked"] = request.form.get("notify_skip_acked") == "on"
                     a["notify_skip_blocked"] = request.form.get("notify_skip_blocked") == "on"
+                    a["muted"] = request.form.get("alerts_muted") == "on"
                     kinds = [k for k in request.form.getlist("notify_kinds") if k in DEFAULT_NOTIFY_KINDS]
                     a["notify_kinds"] = kinds
                     try:
@@ -457,6 +463,8 @@ def create_app(config_path: str) -> Flask:
                             pass
 
                     _save_yaml_file(config_path, disk)
+                    if rt.RUNTIME:
+                        rt.RUNTIME.set_alerts_muted(bool(a.get("muted")))
 
                 rt.RUNTIME.request_reload()
                 flash("Gespeichert. Konfiguration wird neu geladen…", "ok")
@@ -550,6 +558,29 @@ def create_app(config_path: str) -> Flask:
             log.exception("Catalog update failed")
             flash(f"Katalog-Update fehlgeschlagen: {exc}", "error")
         return redirect(url_for("lists_page"))
+
+    @app.route("/actions/mute-alerts", methods=["POST"])
+    @login_required
+    def action_mute_alerts():
+        muted = request.form.get("alerts_muted") == "on"
+        try:
+            disk = _load_yaml_file(config_path)
+            disk.setdefault("alerts", {})
+            if not isinstance(disk["alerts"], dict):
+                disk["alerts"] = {}
+            disk["alerts"]["muted"] = muted
+            _save_yaml_file(config_path, disk)
+            if rt.RUNTIME:
+                rt.RUNTIME.set_alerts_muted(muted)
+            flash(
+                "Alarmierung pausiert — kein Pushover/Discord/Telegram."
+                if muted
+                else "Alarmierung wieder aktiv.",
+                "ok",
+            )
+        except Exception as exc:
+            flash(f"Pause konnte nicht gespeichert werden: {exc}", "error")
+        return redirect(url_for("dashboard"))
 
     @app.route("/actions/reload-config", methods=["POST"])
     @login_required

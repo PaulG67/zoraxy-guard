@@ -77,6 +77,15 @@ nav a.active, nav a:hover { color: var(--text); }
 }
 .flash.ok { background: rgba(62, 207, 142, 0.12); border-color: rgba(62, 207, 142, 0.35); }
 .flash.error { background: rgba(240, 113, 120, 0.12); border-color: rgba(240, 113, 120, 0.35); }
+.flash.warn, .mute-banner {
+  background: rgba(230, 184, 77, 0.14);
+  border-color: rgba(230, 184, 77, 0.4);
+  color: #f3d48a;
+}
+.mute-card.is-muted {
+  border-color: rgba(230, 184, 77, 0.45);
+  background: rgba(230, 184, 77, 0.08);
+}
 
 .actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0 20px; }
 

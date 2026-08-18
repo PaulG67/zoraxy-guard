@@ -131,9 +131,37 @@ def test_alerter_batches_burst():
     assert severity == "high"
 
 
+def test_muted_skips_dispatch():
+    sent = []
+    cfg = {
+        "alerts": {
+            "stdout": False,
+            "cooldown_seconds": 0,
+            "digest_window_seconds": 0,
+            "notify_mode": "severity",
+            "min_severity": "info",
+            "notify_skip_blocked": False,
+            "notify_skip_acked": False,
+            "muted": True,
+        }
+    }
+    alerter = Alerter(cfg, {})
+
+    def capture(title, body, severity, check_url, alert, *, digest_count=0):
+        sent.append(title)
+
+    alerter._dispatch = capture  # type: ignore[method-assign]
+    assert alerter.send(_alert(1), 1.0) is True
+    assert sent == []
+    alerter.set_muted(False)
+    assert alerter.send(_alert(2), 2.0) is True
+    assert len(sent) == 1
+
+
 if __name__ == "__main__":
     test_single_passthrough()
     test_bundle()
     test_body_limit()
     test_alerter_batches_burst()
+    test_muted_skips_dispatch()
     print("digest tests ok")

@@ -170,6 +170,7 @@ class Alerter:
         self.generic = (a.get("generic_webhook") or "").strip()
         self.stdout = bool(a.get("stdout", True))
         self.cooldowns = cooldowns
+        self.muted = bool(a.get("muted", False))
 
         self.digest_window = _cfg_int(a, "digest_window_seconds", DEFAULT_DIGEST_WINDOW, hi=3600)
         self.digest_idle = _cfg_int(a, "digest_idle_seconds", DEFAULT_DIGEST_IDLE, hi=600)
@@ -249,6 +250,24 @@ class Alerter:
             alert=alert,
         )
 
+    def is_muted(self) -> bool:
+        return bool(self.muted or self.alerts_cfg.get("muted"))
+
+    def set_muted(self, muted: bool) -> None:
+        muted = bool(muted)
+        self.muted = muted
+        self.alerts_cfg["muted"] = muted
+        if muted:
+            with self._digest_lock:
+                dropped = len(self._pending)
+                self._pending = []
+            if dropped:
+                log.info("Alarmierung pausiert — %s wartende Push-Meldungen verworfen", dropped)
+            else:
+                log.info("Alarmierung pausiert — kein Pushover/Discord/Telegram")
+        else:
+            log.info("Alarmierung wieder aktiv")
+
     def send(self, alert: Alert, now: float, *, force: bool = False, acked: bool = False) -> bool:
         if not force:
             if not should_notify(alert, self.alerts_cfg, acked=acked):
@@ -257,6 +276,10 @@ class Alerter:
                 return False
 
         payload = self._build_payload(alert, now)
+
+        if not force and self.is_muted():
+            log.debug("Alarmierung pausiert — unterdrückt: %s", payload.title)
+            return True
 
         if self.stdout:
             log.warning("%s | %s", payload.title, payload.body.replace("\n", " | "))
@@ -275,6 +298,8 @@ class Alerter:
     def flush_due(self, now: float) -> None:
         """Send queued pushes after idle pause or max window. Call from the main loop."""
         if self.digest_window <= 0:
+            return
+        if self.is_muted():
             return
         with self._digest_lock:
             if not self._pending:

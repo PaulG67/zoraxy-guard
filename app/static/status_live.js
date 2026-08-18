@@ -75,6 +75,16 @@
     setText("stat-memory", String((snap.memory && snap.memory.size) || 0));
     setText("stat-threats", String(snap.threat_networks || 0));
     setText("stat-min-sev", "Push: " + (snap.notify_summary || ("ab " + (snap.min_severity || "medium"))));
+    var muted = !!snap.alerts_muted;
+    var muteCb = document.getElementById("alerts-muted-toggle");
+    if (muteCb && muteCb !== document.activeElement) muteCb.checked = muted;
+    var muteBanner = document.getElementById("mute-banner");
+    if (muteBanner) muteBanner.style.display = muted ? "" : "none";
+    var muteCard = document.getElementById("mute-card");
+    if (muteCard) {
+      if (muted) muteCard.classList.add("is-muted");
+      else muteCard.classList.remove("is-muted");
+    }
     setText(
       "meta-detector-started",
       snap.started_at ? fmtTs(snap.started_at) + " (" + fmtUptime(snap.uptime_sec) + " uptime)" : "—"
