@@ -4,22 +4,24 @@
 {% set mem = mem %}
 {% include 'partials/memory_state.html' %}
 
+{% macro help_btn(text) -%}
+  {%- if text -%}
+  <span class="cs-help">
+    <button type="button" class="cs-help-btn" title="Hilfe" aria-label="Hilfe">?</button>
+    <span class="cs-help-tip" hidden>{{ text }}</span>
+  </span>
+  {%- endif -%}
+{%- endmacro %}
+
 <div class="tabs">
-  <a href="{{ url_for('crowdsec_page', view='blocks') }}" class="{% if view != 'setup' %}active{% endif %}">Auswertung</a>
+  <a href="{{ url_for('crowdsec_page', view='blocks') }}" class="{% if view == 'blocks' %}active{% endif %}">Auswertung</a>
+  <a href="{{ url_for('crowdsec_page', view='check') }}" class="{% if view == 'check' %}active{% endif %}">Prüfen</a>
   <a href="{{ url_for('crowdsec_page', view='setup') }}" class="{% if view == 'setup' %}active{% endif %}">YAML / Listen</a>
 </div>
 
 {% if view == 'setup' %}
   {% set setup = setup %}
   {% set hub = setup.hub or {} %}
-  {% macro help_btn(text) -%}
-    {%- if text -%}
-    <span class="cs-help">
-      <button type="button" class="cs-help-btn" title="Hilfe" aria-label="Hilfe">?</button>
-      <span class="cs-help-tip" hidden>{{ text }}</span>
-    </span>
-    {%- endif -%}
-  {%- endmacro %}
 
   <section class="block">
     <h2 style="margin:0 0 6px;font-size:1.15rem;">CrowdSec YAML
@@ -250,6 +252,67 @@
     {% endif %}
   </section>
 
+{% elif view == 'check' %}
+<section class="block">
+  <h2 style="margin:0 0 6px;font-size:1.15rem;">CrowdSec prüfen
+    {{ help_btn('Guard prüft die gemounteten YAML-Dateien und ruft die CrowdSec Local API auf: /health (ohne Key) und /v1/decisions mit dem Bouncer-Key. Das ist kein Scan und erzeugt keine Ban-Decision. Der Hostname crowdsec gilt oft nur für Zoraxy — Guard braucht ggf. die Unraid-IP und Port 8080.') }}
+  </h2>
+  <p class="hint" style="margin-top:0;">
+    Ob LAPI erreichbar ist und der Bouncer-Key akzeptiert wird.
+    Plugin-Logs und 403-Blöcke kommen zusätzlich aus den Zoraxy-Logs.
+  </p>
+</section>
+
+<form method="post" class="card" action="{{ url_for('crowdsec_page') }}">
+  <input type="hidden" name="action" value="check">
+  <label>
+    LAPI-URL aus Guard
+    {{ help_btn('Leer = Bouncer agent_url oder zuletzt gespeicherte URL. Wenn Guard crowdsec nicht auflöst: http://UNRAID-IP:8080 (LAPI muss von außen erreichbar sein).') }}
+  </label>
+  <input type="text" name="lapi_url" value="{{ lapi_default }}" placeholder="http://192.168.1.10:8080" autocomplete="off">
+  <div class="actions">
+    <button class="primary" type="submit">Jetzt prüfen</button>
+  </div>
+</form>
+
+{% if check %}
+  <div class="card cs-verdict {{ check.verdict }}">
+    <strong>{% if check.verdict == 'ok' %}OK{% elif check.verdict == 'warn' %}Teilweise OK{% else %}Nicht bestätigt{% endif %}</strong>
+    <p style="margin:8px 0 0;">{{ check.summary }}</p>
+    {% if check.lapi_url %}<p class="hint mono" style="margin:8px 0 0;">LAPI: {{ check.lapi_url }}</p>{% endif %}
+  </div>
+  <div class="card" style="padding:0; overflow:auto;">
+    <table class="hist-table cs-check-table">
+      <thead>
+        <tr>
+          <th>Status</th>
+          <th>Prüfung</th>
+          <th>Detail</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in check.rows %}
+          <tr>
+            <td>
+              {% if r.status == 'ok' %}
+                <span class="path-pill ok">OK</span>
+              {% elif r.status == 'warn' %}
+                <span class="path-pill miss">Hinweis</span>
+              {% else %}
+                <span class="path-pill fail">Fehler</span>
+              {% endif %}
+            </td>
+            <td>{{ r.title }}</td>
+            <td>{{ r.detail }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% else %}
+  <p class="hint">Noch kein Lauf — «Jetzt prüfen» startet den Live-Test.</p>
+{% endif %}
+
 {% else %}
   {% set data = data %}
 
@@ -259,6 +322,7 @@
     CrowdSec (Zoraxy-Add-in) weist bekannte schlechte IPs mit <strong>HTTP 403</strong> ab, bevor sie deine Apps erreichen.
     Guard alarmiert weiter bei Angriffen, die <em>durchkommen</em> (z. B. Exploit-Pfad mit HTTP 2xx).
     Diese CrowdSec-Blöcke selbst erzeugen <strong>keinen Pushover</strong> — wie andere 403er.
+    Ob es läuft: <a href="{{ url_for('crowdsec_page', view='check') }}">Prüfen</a>.
     Bouncer-<code>log_level</code> und Listen unter <a href="{{ url_for('crowdsec_page', view='setup') }}">YAML / Listen</a>.
   </p>
 </section>

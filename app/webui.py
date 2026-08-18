@@ -39,6 +39,7 @@ from .catalog import (
 )
 from . import catalog as catalog_mod
 from .backfill import HOURS_OPTIONS, start_history_backfill
+from . import cscheck
 from . import csconfig
 from . import cshub
 
@@ -140,6 +141,65 @@ def _crowdsec_setup_post(config_path: str):
     if extra:
         args["extra"] = extra
     return redirect(url_for("crowdsec_page", **args))
+
+
+def _persist_crowdsec_lapi_url(config_path: str, url: str) -> None:
+    url = cscheck.normalize_lapi_url(url)
+    if not url:
+        return
+    disk = _load_yaml_file(config_path)
+    cs = disk.get("crowdsec")
+    if not isinstance(cs, dict):
+        cs = {}
+        disk["crowdsec"] = cs
+    if cs.get("lapi_url") == url:
+        return
+    cs["lapi_url"] = url
+    _save_yaml_file(config_path, disk)
+    if rt.RUNTIME:
+        with rt.RUNTIME.lock:
+            live = rt.RUNTIME.cfg.get("crowdsec")
+            if not isinstance(live, dict):
+                live = {}
+                rt.RUNTIME.cfg["crowdsec"] = live
+            live["lapi_url"] = url
+
+
+def _crowdsec_run_check(lapi_url: str = "") -> dict:
+    cfg = rt.RUNTIME.cfg if rt.RUNTIME else {}
+    plugin = rt.RUNTIME.crowdsec if rt.RUNTIME else None
+    hist_total = 0
+    if rt.RUNTIME:
+        snap = rt.RUNTIME.history.snapshot_crowdsec(window="24h")
+        hist_total = int(snap.get("total") or 0)
+    return cscheck.run_check(
+        cfg,
+        plugin_seen=bool(plugin.seen_plugin) if plugin else False,
+        plugin_lines=int(plugin.lines_seen) if plugin else 0,
+        plugin_blocks=int(plugin.blocks_parsed) if plugin else 0,
+        history_blocks=hist_total,
+        lapi_url=lapi_url,
+    )
+
+
+def _crowdsec_check_page(_config_path: str, check: Optional[dict] = None):
+    cfg = rt.RUNTIME.cfg if rt.RUNTIME else {}
+    mem = rt.RUNTIME.memory_state() if rt.RUNTIME else {}
+    lapi_default = ""
+    if check and check.get("lapi_url"):
+        lapi_default = check["lapi_url"]
+    else:
+        lapi_default = cscheck.lapi_url_from_cfg(cfg)
+    return render_template(
+        "crowdsec.html",
+        view="check",
+        data=None,
+        setup=None,
+        check=check,
+        lapi_default=lapi_default,
+        mem=mem,
+        time=time,
+    )
 
 
 def create_app(config_path: str) -> Flask:
@@ -400,12 +460,21 @@ def create_app(config_path: str) -> Flask:
             return redirect(url_for("dashboard"))
 
         if request.method == "POST":
+            if (request.form.get("action") or "").strip() == "check":
+                lapi_url = (request.form.get("lapi_url") or "").strip()
+                try:
+                    _persist_crowdsec_lapi_url(config_path, lapi_url)
+                except Exception:
+                    log.exception("CrowdSec LAPI-URL speichern fehlgeschlagen")
+                return _crowdsec_check_page(config_path, _crowdsec_run_check(lapi_url))
             return _crowdsec_setup_post(config_path)
 
         view = (request.args.get("view") or "blocks").strip().lower()
-        if view not in ("blocks", "setup"):
+        if view not in ("blocks", "setup", "check"):
             view = "blocks"
         mem = rt.RUNTIME.memory_state()
+        if view == "check":
+            return _crowdsec_check_page(config_path)
         if view == "setup":
             extra = (request.args.get("extra") or "").strip()
             setup = csconfig.setup_context(rt.RUNTIME.cfg, extra_rel=extra)

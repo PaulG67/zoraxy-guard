@@ -158,6 +158,7 @@ bad_user_agents:
 crowdsec:
   config_dir: /crowdsec-config                 # CrowdSec /etc/crowdsec
   bouncer_config: /crowdsec-bouncer/config.yaml
+  # lapi_url: http://192.168.1.10:8080         # optional, wenn Guard «crowdsec» nicht auflöst
 
 state_file: /data/state.json
 

@@ -361,6 +361,16 @@ code.logline {
   border-color: rgba(230, 184, 77, 0.4);
   color: #f3d48a;
 }
+.path-pill.fail {
+  background: rgba(232, 93, 93, 0.16);
+  border-color: rgba(232, 93, 93, 0.4);
+  color: #f0a0a0;
+}
+.cs-verdict { border-left: 4px solid var(--border); }
+.cs-verdict.ok { border-left-color: var(--ok); }
+.cs-verdict.warn { border-left-color: #e6b84d; }
+.cs-verdict.fail { border-left-color: #e85d5d; }
+.cs-check-table td:last-child { white-space: normal; }
 .cs-doc-head {
   display: flex;
   justify-content: space-between;

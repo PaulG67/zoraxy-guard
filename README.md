@@ -95,7 +95,7 @@ docker pull ghcr.io/paulg67/zoraxy-guard:latest
 |---|---|
 | **Status** | Memory-Banner, letzte Alarme, Prüfen-Link, Prüf-ID (Auswahl + Eingabe), Test-Alarm |
 | **History** | Zugriffe im Ring, Filter (Erfolg/Fail, Handlungsbedarf, Lärm), Prüfen bei Handlungsbedarf, Reset & laden |
-| **CrowdSec** | Blöcke des Zoraxy-CrowdSec-Add-ins; YAML/Listen (Bouncer, Engine, Whitelist, Collections) |
+| **CrowdSec** | Blöcke des Zoraxy-CrowdSec-Add-ins; **Prüfen** (LAPI + Bouncer-Key); YAML/Listen |
 | **Geprüft** | Stumme Links ohne Push, Filter nach Domain/Pfad/ID/Titel, «Alarmierung aktivieren» |
 | **Konfiguration** | Logs, Listen, Schwellwerte, **welche Alarme gepusht werden** |
 | **Listen** | lokale Blocklisten + Katalog-Update |
@@ -126,6 +126,8 @@ CrowdSec blockt bekannte Angreifer-IPs mit HTTP 403, **bevor** sie deine Apps er
 Guard pusht diese Blöcke nicht (wie andere 403er). Alarme kommen weiter, wenn etwas **durchkommt** (z. B. Exploit-Pfad mit 2xx).
 
 **Auswertung:** `plugin-manager`-Zeilen (`Request blocked`). Dafür Plugin-Log-Level `info` (nicht nur `warning`) und ggf. History → Reset & laden.
+
+**Prüfen:** Reiter CrowdSec → Prüfen → **Jetzt prüfen**. Guard testet Mounts, Bouncer-YAML und die Local API (`/health` plus `/v1/decisions` mit dem Bouncer-Key). Wenn der Hostname `crowdsec` aus Guard nicht auflöst: LAPI-URL `http://UNRAID-IP:8080` (LAPI muss erreichbar sein).
 
 **YAML / Listen:** Collections (Hub) anhaken wie Threat-Listen unter Konfiguration; Community-/Console-Blocklists; Scenarios mit/ohne Ban; Whitelist; Engine; Profile. **?** erklärt jedes Feld.
 
