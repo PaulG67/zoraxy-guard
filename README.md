@@ -95,6 +95,7 @@ Unter **Konfiguration → Alarme** (Standard):
 - nur **Handlungsbedarf** (kein 403-Scanner-Lärm)
 - geprüfte Fingerprints nicht erneut senden
 - geblockte 403/401/Blacklist nicht pushen
+- viele Alarme in wenigen Minuten → **eine Sammelmeldung** (nicht mehrere Pushovers pro Sekunde)
 
 In der Pushover-Nachricht stehen **Prüfen**-Link und **ID: ZG-…**.  
 Dieselbe ID in der Web-UI wählen oder eintippen → **Als geprüft markieren**.

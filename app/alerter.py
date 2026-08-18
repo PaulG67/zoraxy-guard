@@ -1,19 +1,22 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict
+import threading
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 
 from .acks import review_id
 from .checkurl import build_check_url
-from .detectors import Alert
-from .notify import should_notify
+from .detectors import SEVERITY_RANK, Alert
+from .notify import NOTIFY_KINDS, should_notify
 from .selfcheck import append_check_marker
 
 log = logging.getLogger("zoraxy-guard.alert")
 
 PUSHOVER_URL = "https://api.pushover.net/1/messages.json"
+PUSHOVER_BODY_LIMIT = 1024
 
 # Default priority mapping (Pushover: -2 silent … 2 emergency)
 SEVERITY_PRIORITY = {
@@ -23,6 +26,134 @@ SEVERITY_PRIORITY = {
     "high": 1,
     "critical": 2,
 }
+
+KIND_LABELS = {kid: label for kid, label, _hint in NOTIFY_KINDS}
+
+DEFAULT_DIGEST_WINDOW = 180
+DEFAULT_DIGEST_IDLE = 15
+DEFAULT_DIGEST_MAX_ITEMS = 40
+
+
+def _cfg_int(src: dict, key: str, default: int, *, lo: int = 0, hi: int = 86400) -> int:
+    try:
+        value = int(src.get(key, default))
+    except (TypeError, ValueError):
+        value = default
+    return max(lo, min(hi, value))
+
+
+def _span_label(seconds: float) -> str:
+    sec = max(1, int(round(float(seconds))))
+    if sec < 90:
+        return f"{sec} s"
+    mins = max(1, int(round(sec / 60.0)))
+    return f"{mins} min"
+
+
+def _join_limited(values: List[str], max_n: int = 5) -> str:
+    shown = values[:max_n]
+    extra = len(values) - len(shown)
+    text = ", ".join(shown)
+    if extra > 0:
+        text += f" (+{extra})"
+    return text
+
+
+@dataclass
+class PushPayload:
+    ts: float
+    severity: str
+    title: str
+    body: str
+    check_url: str
+    fingerprint: str
+    kind: str
+    origin: str
+    path: str
+    review_id: str
+    alert: Alert
+
+
+def format_digest(
+    items: List[PushPayload], *, limit: int = PUSHOVER_BODY_LIMIT
+) -> Tuple[str, str, str, str]:
+    """One bundled push: title, body, highest severity, best check URL."""
+    n = len(items)
+    if n == 1:
+        it = items[0]
+        return it.title, it.body, it.severity, it.check_url
+
+    sevs = [it.severity for it in items]
+    top = max(sevs, key=lambda s: SEVERITY_RANK.get(s, 0))
+    span = _span_label(items[-1].ts - items[0].ts)
+    title = f"[Zoraxy Guard][{top.upper()}] {n} Alarme in {span}"
+
+    kind_counts: Dict[str, int] = {}
+    origins: List[str] = []
+    paths: List[str] = []
+    seen_o: set[str] = set()
+    seen_p: set[str] = set()
+    for it in items:
+        k = it.kind or "other"
+        kind_counts[k] = kind_counts.get(k, 0) + 1
+        if it.origin and it.origin not in seen_o:
+            seen_o.add(it.origin)
+            origins.append(it.origin)
+        if it.path and it.path not in seen_p:
+            seen_p.add(it.path)
+            paths.append(it.path)
+
+    kind_lines = []
+    for k, c in sorted(kind_counts.items(), key=lambda kv: -kv[1]):
+        kind_lines.append(f"• {c}× {KIND_LABELS.get(k, k)}")
+
+    header_parts = [
+        f"{n} Meldungen gebündelt — höchste Stufe {top.upper()}",
+        "",
+        "Arten:",
+        *kind_lines,
+    ]
+    if origins:
+        header_parts += ["", "Hosts: " + _join_limited(origins)]
+    if paths:
+        header_parts += ["Pfade: " + _join_limited(paths)]
+    header_parts += ["", "Auszug:"]
+    header = "\n".join(header_parts) + "\n"
+
+    ranked = sorted(items, key=lambda it: -SEVERITY_RANK.get(it.severity, 0))
+    excerpt: List[str] = []
+    leftover = n
+    for it in ranked:
+        bit = f"• [{it.severity.upper()}] {it.title}"
+        loc = " ".join(x for x in (it.origin, it.path) if x)
+        if loc:
+            bit += f" — {loc}"
+        if it.review_id:
+            bit += f" ({it.review_id})"
+        more_after = leftover - 1
+        footer = f"\n(+{more_after} weitere in History)" if more_after > 0 else ""
+        trial = header + "\n".join(excerpt + [bit])
+        if len(trial) + len(footer) > limit:
+            break
+        excerpt.append(bit)
+        leftover -= 1
+
+    body = header + "\n".join(excerpt)
+    if leftover > 0:
+        footer = f"\n(+{leftover} weitere in History)"
+        if len(body) + len(footer) <= limit:
+            body += footer
+        else:
+            body = body[: max(0, limit - len(footer))] + footer
+    if len(body) > limit:
+        body = body[:limit]
+
+    check_url = ""
+    for it in ranked:
+        if it.check_url:
+            check_url = it.check_url
+            break
+    return title[:250], body, top, check_url
 
 
 class Alerter:
@@ -39,6 +170,12 @@ class Alerter:
         self.generic = (a.get("generic_webhook") or "").strip()
         self.stdout = bool(a.get("stdout", True))
         self.cooldowns = cooldowns
+
+        self.digest_window = _cfg_int(a, "digest_window_seconds", DEFAULT_DIGEST_WINDOW, hi=3600)
+        self.digest_idle = _cfg_int(a, "digest_idle_seconds", DEFAULT_DIGEST_IDLE, hi=600)
+        self.digest_max_items = _cfg_int(a, "digest_max_items", DEFAULT_DIGEST_MAX_ITEMS, lo=2, hi=200)
+        self._pending: List[PushPayload] = []
+        self._digest_lock = threading.Lock()
 
         po = a.get("pushover") or {}
         if not isinstance(po, dict):
@@ -68,13 +205,7 @@ class Alerter:
         self.cooldowns[fingerprint] = now
         return False
 
-    def send(self, alert: Alert, now: float, *, force: bool = False, acked: bool = False) -> bool:
-        if not force:
-            if not should_notify(alert, self.alerts_cfg, acked=acked):
-                return False
-            if self._cooled(alert.fingerprint, now):
-                return False
-
+    def _build_payload(self, alert: Alert, now: float) -> PushPayload:
         title = f"[Zoraxy Guard][{alert.severity.upper()}] {alert.title}"
         body = alert.body
         if alert.event and alert.event.raw:
@@ -82,8 +213,12 @@ class Alerter:
 
         check_url = ""
         rid = review_id(alert.fingerprint)
+        origin = ""
+        path = ""
         if alert.event:
-            check_url = append_check_marker(build_check_url(alert.event.origin, alert.event.path))
+            origin = (alert.event.origin or "").strip()
+            path = (alert.event.path or "").strip()
+            check_url = append_check_marker(build_check_url(origin, path))
             if rid and check_url:
                 sep = "&" if "?" in check_url else "?"
                 check_url = f"{check_url}{sep}_zgid={rid[3:] if rid.startswith('ZG-') else rid}"
@@ -95,23 +230,108 @@ class Alerter:
             extra_bits.append(f"Prüfen: {check_url}")
         if extra_bits:
             suffix = "\n\n" + "\n".join(extra_bits)
-            if len(body) + len(suffix) <= 1024:
+            if len(body) + len(suffix) <= PUSHOVER_BODY_LIMIT:
                 body = body + suffix
             else:
-                body = body[: max(0, 1024 - len(suffix))] + suffix
+                body = body[: max(0, PUSHOVER_BODY_LIMIT - len(suffix))] + suffix
+
+        return PushPayload(
+            ts=now,
+            severity=alert.severity,
+            title=title,
+            body=body,
+            check_url=check_url,
+            fingerprint=alert.fingerprint,
+            kind=(alert.kind or "").strip(),
+            origin=origin,
+            path=path,
+            review_id=rid,
+            alert=alert,
+        )
+
+    def send(self, alert: Alert, now: float, *, force: bool = False, acked: bool = False) -> bool:
+        if not force:
+            if not should_notify(alert, self.alerts_cfg, acked=acked):
+                return False
+            if self._cooled(alert.fingerprint, now):
+                return False
+
+        payload = self._build_payload(alert, now)
 
         if self.stdout:
-            log.warning("%s | %s", title, body.replace("\n", " | "))
+            log.warning("%s | %s", payload.title, payload.body.replace("\n", " | "))
 
+        if force or self.digest_window <= 0:
+            self._dispatch(payload.title, payload.body, payload.severity, payload.check_url, payload.alert)
+            return True
+
+        with self._digest_lock:
+            self._pending.append(payload)
+            overflow = len(self._pending) >= self.digest_max_items
+        if overflow:
+            self.flush()
+        return True
+
+    def flush_due(self, now: float) -> None:
+        """Send queued pushes after idle pause or max window. Call from the main loop."""
+        if self.digest_window <= 0:
+            return
+        with self._digest_lock:
+            if not self._pending:
+                return
+            first_ts = self._pending[0].ts
+            last_ts = self._pending[-1].ts
+            idle = self.digest_idle if self.digest_idle > 0 else 1
+            due = (
+                now - first_ts >= self.digest_window
+                or now - last_ts >= idle
+                or len(self._pending) >= self.digest_max_items
+            )
+            if not due:
+                return
+            batch = self._pending
+            self._pending = []
+        self._send_batch(batch)
+
+    def flush(self) -> None:
+        """Force-send anything still queued (config reload / overflow)."""
+        with self._digest_lock:
+            if not self._pending:
+                return
+            batch = self._pending
+            self._pending = []
+        self._send_batch(batch)
+
+    def _send_batch(self, batch: List[PushPayload]) -> None:
+        if not batch:
+            return
+        if len(batch) == 1:
+            it = batch[0]
+            self._dispatch(it.title, it.body, it.severity, it.check_url, it.alert)
+            return
+        title, body, severity, check_url = format_digest(batch)
+        log.info("Push-Sammelmeldung: %s Alarme → %s", len(batch), title)
+        self._dispatch(title, body, severity, check_url, batch[0].alert, digest_count=len(batch))
+
+    def _dispatch(
+        self,
+        title: str,
+        body: str,
+        severity: str,
+        check_url: str,
+        alert: Alert,
+        *,
+        digest_count: int = 0,
+    ) -> None:
         if self.discord:
-            self._discord(title, body, alert.severity)
+            self._discord(title, body, severity)
         if self.tg_token and self.tg_chat:
             self._telegram(title, body)
         if self.po_user and self.po_token:
-            self._pushover(title, body, alert.severity, check_url)
+            self._pushover(title, body, severity, check_url)
         if self.generic:
-            self._generic(title, body, alert)
-        return True
+            self._generic(title, body, alert, severity=severity, digest_count=digest_count)
+
     def _discord(self, title: str, body: str, severity: str) -> None:
         color = {
             "info": 0x808080,
@@ -153,7 +373,7 @@ class Alerter:
         # Keep within Pushover limits
         priority = max(-2, min(2, int(priority)))
 
-        message = body[:1024]
+        message = body[:PUSHOVER_BODY_LIMIT]
 
         data: Dict[str, Any] = {
             "token": self.po_token,
@@ -185,13 +405,24 @@ class Alerter:
         except Exception as exc:
             log.error("Pushover send failed: %s", exc)
 
-    def _generic(self, title: str, body: str, alert: Alert) -> None:
+    def _generic(
+        self,
+        title: str,
+        body: str,
+        alert: Alert,
+        *,
+        severity: str,
+        digest_count: int = 0,
+    ) -> None:
         payload: Dict[str, Any] = {
             "title": title,
             "body": body,
-            "severity": alert.severity,
+            "severity": severity,
             "fingerprint": alert.fingerprint,
         }
+        if digest_count:
+            payload["digest"] = True
+            payload["count"] = digest_count
         try:
             r = requests.post(self.generic, json=payload, timeout=10)
             r.raise_for_status()

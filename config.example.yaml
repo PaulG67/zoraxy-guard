@@ -89,6 +89,9 @@ exploit_path_ignore: []
 
 alerts:
   cooldown_seconds: 300
+  # Burst → eine Sammelmeldung (Pushover/Discord/Telegram). 0 = sofort jede einzeln.
+  digest_window_seconds: 180
+  digest_idle_seconds: 15
   min_severity: medium
   # Push-Filter: action | action_watch | severity
   notify_mode: action

@@ -420,6 +420,16 @@ def create_app(config_path: str) -> Flask:
                         a["cooldown_seconds"] = int(request.form.get("cooldown_seconds") or 300)
                     except ValueError:
                         a["cooldown_seconds"] = 300
+                    try:
+                        a["digest_window_seconds"] = int(request.form.get("digest_window_seconds") or 180)
+                    except ValueError:
+                        a["digest_window_seconds"] = 180
+                    try:
+                        a["digest_idle_seconds"] = int(request.form.get("digest_idle_seconds") or 15)
+                    except ValueError:
+                        a["digest_idle_seconds"] = 15
+                    a["digest_window_seconds"] = max(0, min(3600, a["digest_window_seconds"]))
+                    a["digest_idle_seconds"] = max(0, min(600, a["digest_idle_seconds"]))
                     a["stdout"] = request.form.get("stdout") == "on"
                     a["discord_webhook"] = request.form.get("discord_webhook", "").strip()
                     a["telegram_bot_token"] = request.form.get("telegram_bot_token", "").strip()

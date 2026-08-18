@@ -88,6 +88,15 @@ def notify_summary(alerts_cfg: Optional[dict] = None) -> str:
         extras.append("geprüft aus")
     if cfg.get("notify_skip_blocked", True):
         extras.append("403 aus")
+    try:
+        window = int(cfg.get("digest_window_seconds", 180) or 0)
+    except (TypeError, ValueError):
+        window = 180
+    if window > 0:
+        if window >= 60:
+            extras.append(f"Sammel {max(1, round(window / 60))} min")
+        else:
+            extras.append(f"Sammel {window}s")
     if extras:
         return f"{label} · {', '.join(extras)}"
     return label

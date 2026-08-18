@@ -138,9 +138,21 @@
       </div>
       <div>
         <label>Cooldown (s)</label>
-        <input type="number" name="cooldown_seconds" value="{{ cfg.get('alerts', {}).get('cooldown_seconds', 300) }}">
+        <input type="number" name="cooldown_seconds" min="0" value="{{ cfg.get('alerts', {}).get('cooldown_seconds', 300) }}">
       </div>
     </div>
+    <p class="hint" style="margin-top:8px;">Cooldown gilt <strong>pro Fingerprint</strong> (gleicher Host+Pfad). Viele verschiedene Alarme in kurzer Zeit werden zusätzlich gebündelt.</p>
+    <div class="row2">
+      <div>
+        <label>Sammelfenster (s)</label>
+        <input type="number" name="digest_window_seconds" min="0" value="{{ cfg.get('alerts', {}).get('digest_window_seconds', 180) }}">
+      </div>
+      <div>
+        <label>Warten nach letztem Alarm (s)</label>
+        <input type="number" name="digest_idle_seconds" min="0" value="{{ cfg.get('alerts', {}).get('digest_idle_seconds', 15) }}">
+      </div>
+    </div>
+    <p class="hint">Standard 180 / 15: Burst (auch mehrere pro Sekunde) → eine Pushover-Sammelmeldung. Einzelner Alarm geht nach 15&nbsp;s Pause raus. Sammelfenster 0 = jede Meldung sofort einzeln.</p>
 
     <label class="check" style="margin-top:10px;">
       <input type="checkbox" name="notify_skip_acked" {% if cfg.get('alerts', {}).get('notify_skip_acked', true) %}checked{% endif %}>

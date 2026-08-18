@@ -189,6 +189,10 @@ def run(config_path: str) -> None:
 
         if do_full:
             try:
+                with runtime.lock:
+                    old_alt = runtime.alerter
+                if old_alt is not None:
+                    old_alt.flush()
                 cfg, threats, detector, alerter = _rebuild_from_config(config_path, cooldowns)
                 alerter = Alerter(cfg, cooldowns)
                 log_cfg = cfg.get("log", {})
@@ -237,13 +241,14 @@ def run(config_path: str) -> None:
 
         lines = tailer.poll()
         now = time.time()
+        with runtime.lock:
+            alt = runtime.alerter or alerter
+            det = runtime.detector
+            hist = runtime.history
         if lines:
             with runtime.lock:
                 runtime.lines_processed += len(lines)
                 runtime.last_line_at = now
-                det = runtime.detector
-                alt = runtime.alerter
-                hist = runtime.history
             for line in lines:
                 event = parse_line(line)
                 self_check = runtime.selfchecks.matches(event.origin, event.path)
@@ -256,6 +261,9 @@ def run(config_path: str) -> None:
                 for alert in det.process(event):
                     if alt.send(alert, now, acked=runtime.acks.is_acked(alert.fingerprint)):
                         runtime.note_alert(alert)
+
+        if alt:
+            alt.flush_due(now)
 
         save_counter += 1
         if save_counter >= 10:
