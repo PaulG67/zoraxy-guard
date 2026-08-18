@@ -269,7 +269,7 @@ class AckStore:
             rows.append(row)
 
         return {
-            "items": rows[: max(1, int(limit))],
+            "rows": rows[: max(1, int(limit))],
             "total": len(items),
             "filtered": len(rows),
             "origins": sorted(all_origins, key=str.lower),

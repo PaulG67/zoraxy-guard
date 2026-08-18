@@ -71,7 +71,7 @@
   </div>
 </div>
 
-{% if not data.items %}
+{% if not data.rows %}
   <div class="card">
     <p class="muted" style="margin:0;">
       {% if data.total %}
@@ -96,10 +96,10 @@
         </tr>
       </thead>
       <tbody>
-        {% for row in data.items %}
+        {% for row in data.rows %}
           <tr>
             <td class="mono nowrap">
-              {% if row.ts %}{{ time.strftime('%Y-%m-%d %H:%M', time.localtime(row.ts)) }}{% else %}—{% endif %}
+              {% if row.ts %}{{ time.strftime('%Y-%m-%d %H:%M', time.localtime(row.ts|float)) }}{% else %}—{% endif %}
             </td>
             <td class="mono"><span class="alert-id">{{ row.review_id or '—' }}</span></td>
             <td class="mono">{{ row.origin or '—' }}</td>
@@ -134,8 +134,8 @@
       </tbody>
     </table>
   </div>
-  {% if data.filtered > data.items|length %}
-    <p class="hint">Zeigt die neuesten {{ data.items|length }} von {{ data.filtered }} Treffern.</p>
+  {% if data.filtered > data.rows|length %}
+    <p class="hint">Zeigt die neuesten {{ data.rows|length }} von {{ data.filtered }} Treffern.</p>
   {% endif %}
 {% endif %}
 

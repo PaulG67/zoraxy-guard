@@ -290,7 +290,7 @@ class Runtime:
                 fp = rec.get("fingerprint") or ""
                 if fp:
                     by_fp[fp] = rec
-        for row in data["items"]:
+        for row in data["rows"]:
             rec = by_fp.get(row.get("fingerprint") or "") or {}
             if not row.get("origin"):
                 row["origin"] = rec.get("origin") or ""
