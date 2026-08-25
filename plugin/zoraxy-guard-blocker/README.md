@@ -100,11 +100,10 @@ https://github.com/PaulG67/zoraxy-guard/releases/download/zoraxy-guard-blocker-l
 
 Jede Datei hat eine begleitende `.sha256`-Prüfsumme; `SHA256SUMS` enthält alle
 zusammen. Nach dem Herunterladen (z. B. per `wget`/`curl` direkt auf dem
-Unraid-Server) Datei in den Plugin-Unterordner legen und ausführbar machen:
-
-```sh
-chmod +x zoraxy-guard-blocker_linux_amd64
-```
+Unraid-Server) muss die Datei noch **passend benannt und platziert** werden —
+siehe [Installieren](#installieren) für die exakte Namenskonvention, die
+Zoraxy verlangt (nicht einfach `chmod +x` und ablegen, der Dateiname muss
+zum Ordnernamen und zur Plugin-ID passen).
 
 ## Selbst bauen
 
@@ -124,14 +123,33 @@ docker rm zgb-extract
 ## Installieren
 
 Zoraxy startet Plugins als eigene Prozesse aus seinem Plugin-Verzeichnis
-(Flag `-plugin`, Default `./plugins`). Eigenes Unterverzeichnis anlegen und
-die gebaute Binary dort ablegen, z. B.:
+(Flag `-plugin`, Default `./plugins`). Zoraxy verlangt dabei eine **strikte
+Namenskonvention** ([offizielle Doku](https://zoraxy.aroz.org/plugins/html/1.%20Introduction/3.%20Installing%20Plugin.html)):
+
+- Der Unterordner muss **exakt** wie die Plugin-ID heissen: **`li.gehring.zoraxy-guard-blocker`**
+  (prüfbar per `./<binary> -introspect`, Feld `"id"`).
+- Die Binary-Datei **innerhalb** dieses Ordners muss **exakt genauso heissen**
+  wie der Ordner (unter Windows mit `.exe`).
+
+Also **nicht** `zoraxy-guard-blocker` oder ein Anzeigename wie
+"Zoraxy Guard Blocker", sondern:
 
 ```text
-<zoraxy>/plugins/zoraxy-guard-blocker/zoraxy-guard-blocker
+<zoraxy>/plugins/li.gehring.zoraxy-guard-blocker/li.gehring.zoraxy-guard-blocker
 ```
 
-Danach in Zoraxy unter **Plugins** neu einlesen lassen und aktivieren.
+Die von der [Release](https://github.com/PaulG67/zoraxy-guard/releases/tag/zoraxy-guard-blocker-latest)
+heruntergeladene Datei (z. B. `zoraxy-guard-blocker_linux_amd64`) muss also beim
+Kopieren entsprechend umbenannt werden:
+
+```sh
+mkdir -p li.gehring.zoraxy-guard-blocker
+mv zoraxy-guard-blocker_linux_amd64 li.gehring.zoraxy-guard-blocker/li.gehring.zoraxy-guard-blocker
+chmod +x li.gehring.zoraxy-guard-blocker/li.gehring.zoraxy-guard-blocker
+```
+
+Danach Zoraxy neu starten (Plugins werden beim Start gescannt) und unter
+**Plugins** aktivieren.
 
 ## Datenspeicherung
 
