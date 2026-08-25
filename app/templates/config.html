@@ -222,6 +222,20 @@
     <p class="hint">Hinweis: Env-Variablen (z. B. PUSHOVER_API_TOKEN im Unraid-Template) überschreiben beim Laden ggf. Datei-Werte zur Laufzeit. Für dauerhafte Secrets beides oder nur die Datei nutzen.</p>
   </section>
 
+  <section class="block">
+    <h2>Sperren-Export (Zoraxy-Guard-Blocker-Plugin)</h2>
+    <p class="hint">
+      Zeigt in der History bei Einträgen mit Handlungsbedarf Checkboxen und einen Export-Button.
+      Exportierte Einträge (Domain, Pfad, Status) landen als JSON-Datei, die du im
+      <code>zoraxy-guard-blocker</code>-Plugin (Reiter «Import») einliest, um dort Tags zuzuweisen
+      und den Pfad je Domain zu sperren. Keine automatische Verbindung — reiner Datei-Export.
+    </p>
+    <label class="check">
+      <input type="checkbox" name="block_export_enabled" {% if cfg.get('block_export', {}).get('enabled') %}checked{% endif %}>
+      <span>Export-Funktion in der History anzeigen</span>
+    </label>
+  </section>
+
   <div class="actions">
     <button class="primary" type="submit">Speichern &amp; anwenden</button>
   </div>
