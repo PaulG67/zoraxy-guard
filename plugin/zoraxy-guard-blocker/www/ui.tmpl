@@ -145,9 +145,9 @@
   }
 
   // Zoraxy embeds plugin UIs in <iframe sandbox="allow-scripts allow-same-origin">
-  // WITHOUT allow-forms. Native form submit (and often the submit event itself)
-  // is blocked by the browser — clicks appear to do nothing. All POST actions
-  // must therefore go through a button click + fetch, never form.submit().
+  // WITHOUT allow-forms and WITHOUT allow-modals. Native form submit is blocked,
+  // and window.confirm()/alert() are also blocked — delete buttons that waited
+  // on confirm appeared to do nothing. Confirmation is a second click instead.
   document.addEventListener('click', function (ev) {
     var btn = ev.target && ev.target.closest
       ? ev.target.closest('button[data-post], button.primary, button.danger, button[type="submit"]')
@@ -158,9 +158,33 @@
     if ((form.method || 'get').toLowerCase() !== 'post') return;
     ev.preventDefault();
     ev.stopPropagation();
-    if (btn.getAttribute('data-confirm')) {
-      if (!window.confirm(btn.getAttribute('data-confirm'))) return;
+
+    var needConfirm = btn.getAttribute('data-confirm');
+    if (needConfirm && btn.getAttribute('data-armed') !== '1') {
+      document.querySelectorAll('button[data-armed="1"]').forEach(function (other) {
+        if (other === btn) return;
+        other.setAttribute('data-armed', '0');
+        if (other.getAttribute('data-label-orig')) {
+          other.textContent = other.getAttribute('data-label-orig');
+        }
+      });
+      btn.setAttribute('data-label-orig', btn.textContent);
+      btn.setAttribute('data-armed', '1');
+      btn.textContent = 'Nochmals klicken: ' + needConfirm;
+      setTimeout(function () {
+        if (btn.getAttribute('data-armed') !== '1') return;
+        btn.setAttribute('data-armed', '0');
+        btn.textContent = btn.getAttribute('data-label-orig') || btn.textContent;
+      }, 4000);
+      return;
     }
+    if (needConfirm) {
+      btn.setAttribute('data-armed', '0');
+      if (btn.getAttribute('data-label-orig')) {
+        btn.textContent = btn.getAttribute('data-label-orig');
+      }
+    }
+
     postForm(form).catch(function (err) {
       showError('Speichern fehlgeschlagen: ' + err.message);
     });
