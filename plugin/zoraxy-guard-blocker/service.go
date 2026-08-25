@@ -28,7 +28,7 @@ const maxImportBody = 2 << 20 // 2 MiB
 // uiRevision is shown in the UI footer. Bump it whenever the embedded UI
 // changes so a stale plugin binary on disk is immediately visible instead of
 // looking like a broken feature.
-const uiRevision = "2026-08-25 · csrf-header"
+const uiRevision = "2026-08-25 · post-json"
 
 // Zoraxy serves the plugin UI under /plugin.ui/<plugin-id>/ui/, so redirect
 // targets must stay relative to the UI root instead of using uiPath.
@@ -248,7 +248,29 @@ func flashKindFromQuery(r *http.Request) string {
 	return "ok"
 }
 
+// wantsJSON is true when the browser UI submitted via fetch. Those requests
+// must not get a 303: Zoraxy's reverse proxy rewrites Location against the
+// plugin's private /ui root, and the iframe then navigates to a URL the
+// operator's browser cannot follow — the save already happened, but the
+// page looks unchanged. JSON + a client-side reload avoids that entirely.
+func wantsJSON(r *http.Request) bool {
+	accept := r.Header.Get("Accept")
+	return strings.Contains(accept, "application/json") ||
+		r.Header.Get("X-Requested-With") == "fetch"
+}
+
 func redirectWithFlash(w http.ResponseWriter, r *http.Request, target, msg, kind string) {
+	if wantsJSON(r) {
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		_ = json.NewEncoder(w).Encode(map[string]string{
+			"ok":         "1",
+			"flash":      msg,
+			"flash_kind": kind,
+			"redirect":   target,
+		})
+		return
+	}
 	sep := "?"
 	if strings.Contains(target, "?") {
 		sep = "&"

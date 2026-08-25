@@ -79,13 +79,27 @@
     var wrap = document.querySelector('.wrap');
     wrap.insertBefore(box, wrap.children[1]);
     box.scrollIntoView({ block: 'nearest' });
+    var out = document.getElementById('diag-out');
+    if (out) {
+      out.hidden = false;
+      out.textContent = msg;
+    }
+  }
+
+  function goAfterSave(target, flash, kind) {
+    var dest = target || '.';
+    if (flash) {
+      dest += (dest.indexOf('?') >= 0 ? '&' : '?') +
+        'flash=' + encodeURIComponent(flash) +
+        '&flash_kind=' + encodeURIComponent(kind || 'ok');
+    }
+    window.location.assign(dest);
   }
 
   // Zoraxy protects its whole web panel with gorilla/csrf, and this UI is
-  // proxied through it. A plain form POST fails twice over: the token would
-  // have to use gorilla's own field name, and reading it out of the body
-  // drains the body before the reverse proxy can forward it upstream. The
-  // X-CSRF-Token header is checked first and leaves the body intact.
+  // proxied through it. POSTs go out with X-CSRF-Token. The server answers
+  // with JSON (not a 303): following redirects through the plugin reverse
+  // proxy breaks the iframe Location, so a client-side navigation is safer.
   document.addEventListener('submit', function (ev) {
     if (ev.defaultPrevented) return;
     var form = ev.target;
@@ -99,25 +113,35 @@
       data.forEach(function (value) {
         if (value instanceof File && value.name !== '') hasUpload = true;
       });
+      // Prefer the raw action attribute: form.action can resolve against a
+      // rewritten base and point outside /plugin.ui/<id>/.
+      var target = form.getAttribute('action') || form.action || '.';
 
-      fetch(form.action, {
+      fetch(target, {
         method: 'POST',
         credentials: 'same-origin',
-        headers: { 'X-CSRF-Token': csrfToken },
+        headers: {
+          'X-CSRF-Token': csrfToken,
+          'Accept': 'application/json',
+          'X-Requested-With': 'fetch'
+        },
         body: hasUpload ? data : new URLSearchParams(data)
       }).then(function (res) {
-        if (!res.ok) {
-          return res.text().then(function (text) {
+        return res.text().then(function (text) {
+          if (!res.ok) {
             throw new Error('HTTP ' + res.status + ' — ' + text.slice(0, 300));
-          });
-        }
-        if (res.redirected) {
-          window.location.assign(res.url);
-          return;
-        }
-        return res.text().then(function (html) {
+          }
+          var trimmed = (text || '').replace(/^\s+/, '');
+          if (trimmed.charAt(0) === '{') {
+            try {
+              var j = JSON.parse(text);
+              goAfterSave(j.redirect || target, j.flash || '', j.flash_kind || 'ok');
+              return;
+            } catch (e) { /* fall through to HTML */ }
+          }
+          // Import preview and other handlers still return a full HTML page.
           document.open('text/html', 'replace');
-          document.write(html);
+          document.write(text);
           document.close();
         });
       }).catch(function (err) {
