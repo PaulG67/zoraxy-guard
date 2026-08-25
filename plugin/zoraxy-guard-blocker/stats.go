@@ -10,12 +10,12 @@ import (
 // external chart library — the plugin UI runs in a sandboxed iframe.
 func renderHitChart(buckets []HitBucket) template.HTML {
 	const (
-		width   = 920
-		height  = 280
-		padL    = 44
-		padR    = 16
-		padT    = 20
-		padB    = 48
+		width  = 920
+		height = 280
+		padL   = 44
+		padR   = 16
+		padT   = 20
+		padB   = 48
 	)
 	plotW := width - padL - padR
 	plotH := height - padT - padB
