@@ -1,0 +1,334 @@
+{{define "layout"}}
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} · Zoraxy Guard Blocker</title>
+<style>
+  :root { --bg:#0f1420; --panel:#161d2d; --border:#28324a; --text:#e7ecf5; --muted:#8f9bb3; --accent:#5ec2a4; --warn:#f0b429; --err:#f07178; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
+  a { color: var(--accent); text-decoration:none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width:1080px; margin:0 auto; padding:18px 20px 60px; }
+  header.bar { display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; flex-wrap:wrap; gap:10px; }
+  header.bar h1 { font-size:1.1rem; margin:0; }
+  nav a { margin-right:14px; padding:6px 10px; border-radius:8px; }
+  nav a.active { background:var(--panel); border:1px solid var(--border); }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:16px 18px; margin-bottom:16px; }
+  .hint { color:var(--muted); font-size:0.85rem; }
+  table { width:100%; border-collapse:collapse; font-size:0.86rem; }
+  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--border); vertical-align:top; }
+  th { color:var(--muted); font-weight:600; text-transform:uppercase; font-size:0.72rem; letter-spacing:0.03em; }
+  code, .mono { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  .chip { display:inline-block; background:#20293d; border:1px solid var(--border); border-radius:999px; padding:2px 9px; margin:1px 3px 1px 0; font-size:0.78rem; }
+  .chip.tag { color:var(--accent); border-color:rgba(94,194,164,0.4); }
+  label { display:block; font-size:0.82rem; color:var(--muted); margin:10px 0 4px; }
+  input[type=text], input[type=number], select, textarea { width:100%; background:#0e131e; border:1px solid var(--border); border-radius:7px; color:var(--text); padding:8px 9px; font:inherit; }
+  input[type=checkbox] { margin-right:6px; }
+  button, .btn { appearance:none; border:1px solid var(--border); background:#243145; color:var(--text); border-radius:8px; padding:8px 14px; font:inherit; cursor:pointer; }
+  button.primary { background:var(--accent); border-color:transparent; color:#04150f; font-weight:600; }
+  button.danger { background:rgba(240,113,120,0.16); border-color:rgba(240,113,120,0.4); }
+  button:hover { filter:brightness(1.08); }
+  .row { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; }
+  .row > div { flex:1; min-width:160px; }
+  .flash { padding:9px 12px; border-radius:8px; margin-bottom:14px; font-size:0.86rem; }
+  .flash.ok { background:rgba(94,194,164,0.15); border:1px solid rgba(94,194,164,0.4); }
+  .flash.error { background:rgba(240,113,120,0.15); border:1px solid rgba(240,113,120,0.4); }
+  .muted { color:var(--muted); }
+  .badge-off { color:var(--muted); }
+  .setup-box { border-left:3px solid var(--warn); padding-left:12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="bar">
+    <h1>🛡 Zoraxy Guard Blocker</h1>
+    <nav>
+      <a href="{{.UIPath}}/" class="{{if eq .Active "dashboard"}}active{{end}}">Übersicht</a>
+      <a href="{{.UIPath}}/rules" class="{{if eq .Active "rules"}}active{{end}}">Pfad-Regeln</a>
+      <a href="{{.UIPath}}/domains" class="{{if eq .Active "domains"}}active{{end}}">Domains</a>
+      <a href="{{.UIPath}}/import" class="{{if eq .Active "import"}}active{{end}}">Import</a>
+    </nav>
+  </header>
+  {{if .Flash}}<div class="flash {{.FlashKind}}">{{.Flash}}</div>{{end}}
+  {{.Content}}
+</div>
+</body>
+</html>
+{{end}}
+
+{{define "dashboard"}}
+<div class="card setup-box">
+  <h3 style="margin-top:0;">Einrichtung in Zoraxy (einmalig pro Domain)</h3>
+  <p class="hint">
+    Damit Zoraxy überhaupt Traffic an dieses Plugin schickt, muss die Domain in
+    <strong>HTTP Proxy Rules → Domain bearbeiten → Tags</strong> den Tag
+    <code>{{.EnableTag}}</code> erhalten, und dieses Plugin muss unter
+    <strong>Plugins</strong> für den Tag <code>{{.EnableTag}}</code> aktiviert sein.
+    Welche Pfade dann für diese Domain wirklich gesperrt werden, steuerst du danach
+    <em>hier</em> im Plugin über die eigenen Tags (Reiter «Domains» und «Pfad-Regeln»).
+  </p>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0;">Tags im Überblick</h3>
+  {{if not .Tags}}
+    <p class="muted">Noch keine Tags angelegt. Lege unter «Pfad-Regeln» oder «Domains» einen Tag an.</p>
+  {{else}}
+  <table>
+    <thead><tr><th>Tag</th><th>Domains</th><th>Aktive Pfad-Regeln</th></tr></thead>
+    <tbody>
+      {{range .TagSummaries}}
+      <tr>
+        <td><span class="chip tag">{{.Name}}</span></td>
+        <td>{{.DomainCount}}</td>
+        <td>{{.RuleCount}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{end}}
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0;">Zuletzt gesperrt</h3>
+  {{if not .RecentHits}}
+    <p class="muted">Noch keine Zugriffe geblockt.</p>
+  {{else}}
+  <table>
+    <thead><tr><th>Pfad</th><th>Tag</th><th>Treffer</th><th>Zuletzt</th></tr></thead>
+    <tbody>
+      {{range .RecentHits}}
+      <tr><td class="mono">{{.Path}}</td><td><span class="chip tag">{{.Tag}}</span></td><td>{{.Hits}}</td><td>{{.LastHit}}</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{end}}
+</div>
+{{end}}
+
+{{define "rules"}}
+<div class="card">
+  <h3 style="margin-top:0;">Neue Pfad-Regel (manueller Eintrag)</h3>
+  <form method="post" action="{{.UIPath}}/rules">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <input type="hidden" name="action" value="add">
+    <div class="row">
+      <div>
+        <label>Pfad</label>
+        <input type="text" name="path" placeholder="/.envrc" required>
+      </div>
+      <div>
+        <label>Match-Typ</label>
+        <select name="match_type">
+          <option value="exact">exakt</option>
+          <option value="prefix">Prefix (inkl. Unterpfade)</option>
+          <option value="wildcard">Wildcard (z. B. /.git/*)</option>
+        </select>
+      </div>
+      <div>
+        <label>Tag</label>
+        <input type="text" name="tag" list="known-tags" placeholder="dotfiles" required>
+      </div>
+      <div>
+        <label>Notiz (optional)</label>
+        <input type="text" name="note" placeholder="gefunden auf files.gehring.li">
+      </div>
+      <div style="flex:0;">
+        <label>&nbsp;</label>
+        <button class="primary" type="submit">Hinzufügen</button>
+      </div>
+    </div>
+  </form>
+  <datalist id="known-tags">{{range .Tags}}<option value="{{.Name}}">{{end}}</datalist>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0;">Bestehende Pfad-Regeln ({{len .Rules}})</h3>
+  {{if not .Rules}}
+    <p class="muted">Noch keine Regeln. Lege oben eine an oder importiere Einträge aus Zoraxy Guard.</p>
+  {{else}}
+  <table>
+    <thead><tr><th>Pfad</th><th>Match</th><th>Tag</th><th>Aktiv</th><th>Treffer</th><th>Notiz</th><th></th></tr></thead>
+    <tbody>
+      {{range .Rules}}
+      <tr>
+        <td class="mono">{{.Path}}</td>
+        <td>{{.MatchType}}</td>
+        <td><span class="chip tag">{{.Tag}}</span></td>
+        <td>
+          <form method="post" action="{{$.UIPath}}/rules" style="display:inline;">
+            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+            <input type="hidden" name="action" value="toggle">
+            <input type="hidden" name="id" value="{{.ID}}">
+            <button type="submit">{{if .Enabled}}aktiv – deaktivieren{{else}}inaktiv – aktivieren{{end}}</button>
+          </form>
+        </td>
+        <td>{{.Hits}}</td>
+        <td class="muted">{{.Note}}</td>
+        <td>
+          <form method="post" action="{{$.UIPath}}/rules" style="display:inline;" onsubmit="return confirm('Regel löschen?');">
+            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+            <input type="hidden" name="action" value="delete">
+            <input type="hidden" name="id" value="{{.ID}}">
+            <button type="submit" class="danger">Löschen</button>
+          </form>
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{end}}
+</div>
+{{end}}
+
+{{define "domains"}}
+<div class="card">
+  <h3 style="margin-top:0;">Domain einem oder mehreren Tags zuweisen</h3>
+  <p class="hint">Nur Domains, die hier eingetragen sind, werden von diesem Plugin überhaupt geprüft (unabhängig vom Zoraxy-Tag, siehe Übersicht).</p>
+  <form method="post" action="{{.UIPath}}/domains">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <input type="hidden" name="action" value="set">
+    <div class="row">
+      <div>
+        <label>Domain</label>
+        <input type="text" name="domain" placeholder="files.gehring.li" required>
+      </div>
+      <div>
+        <label>Tags (Komma-getrennt)</label>
+        <input type="text" name="tags" list="known-tags" placeholder="dotfiles, secrets" required>
+      </div>
+      <div style="flex:0;">
+        <label>&nbsp;</label>
+        <button class="primary" type="submit">Speichern</button>
+      </div>
+    </div>
+  </form>
+  <datalist id="known-tags">{{range .Tags}}<option value="{{.Name}}">{{end}}</datalist>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0;">Zugewiesene Domains ({{len .Domains}})</h3>
+  {{if not .Domains}}
+    <p class="muted">Noch keine Domain zugewiesen.</p>
+  {{else}}
+  <table>
+    <thead><tr><th>Domain</th><th>Tags</th><th></th></tr></thead>
+    <tbody>
+      {{range .Domains}}
+      <tr>
+        <td class="mono">{{.Domain}}</td>
+        <td>{{range .Tags}}<span class="chip tag">{{.}}</span>{{end}}</td>
+        <td>
+          <form method="post" action="{{$.UIPath}}/domains" style="display:inline;" onsubmit="return confirm('Domain-Zuweisung löschen?');">
+            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+            <input type="hidden" name="action" value="delete">
+            <input type="hidden" name="domain" value="{{.Domain}}">
+            <button type="submit" class="danger">Löschen</button>
+          </form>
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{end}}
+</div>
+{{end}}
+
+{{define "import_form"}}
+<div class="card">
+  <h3 style="margin-top:0;">Aus Zoraxy Guard exportierte Einträge importieren</h3>
+  <p class="hint">
+    In Zoraxy Guard: History → Handlungsbedarf-Zeilen ankreuzen → «Ausgewählte für Sperr-Plugin exportieren».
+    Die heruntergeladene JSON-Datei hier einfügen oder hochladen. Im nächsten Schritt wählst du pro Zeile
+    (oder für alle zusammen) einen Tag und den Match-Typ — Regeln und Domain-Zuweisung werden erst danach angelegt.
+  </p>
+  <form method="post" action="{{.UIPath}}/import" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <input type="hidden" name="step" value="preview">
+    <label>JSON-Datei</label>
+    <input type="file" name="file" accept="application/json">
+    <label>… oder JSON einfügen</label>
+    <textarea name="raw_json" rows="8" placeholder='{"entries": [...] }'></textarea>
+    <div style="margin-top:12px;">
+      <button class="primary" type="submit">Weiter zur Tag-Auswahl</button>
+    </div>
+  </form>
+</div>
+{{end}}
+
+{{define "import_preview"}}
+<div class="card">
+  <h3 style="margin-top:0;">Tags zuweisen und übernehmen ({{len .Rows}} Einträge)</h3>
+  {{if .SkippedCount}}<p class="hint">{{.SkippedCount}} Einträge übersprungen (ungültig/leer).</p>{{end}}
+  <form method="post" action="{{.UIPath}}/import">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <input type="hidden" name="step" value="apply">
+    <div class="row" style="margin-bottom:6px;">
+      <div>
+        <label>Tag für alle markierten Zeilen setzen</label>
+        <input type="text" id="bulk-tag" list="known-tags" placeholder="dotfiles">
+      </div>
+      <div>
+        <label>Match-Typ für alle markierten Zeilen setzen</label>
+        <select id="bulk-match">
+          <option value="">— unverändert —</option>
+          <option value="exact">exakt</option>
+          <option value="prefix">Prefix</option>
+          <option value="wildcard">Wildcard</option>
+        </select>
+      </div>
+      <div style="flex:0;">
+        <label>&nbsp;</label>
+        <button type="button" onclick="applyBulk()">Auf Auswahl anwenden</button>
+      </div>
+    </div>
+    <datalist id="known-tags">{{range .Tags}}<option value="{{.Name}}">{{end}}</datalist>
+    <table>
+      <thead><tr><th><input type="checkbox" id="chk-all" onclick="toggleAll(this)"></th><th>Domain</th><th>Pfad</th><th>Status</th><th>Notiz</th><th>Tag</th><th>Match-Typ</th></tr></thead>
+      <tbody>
+        {{range $i, $row := .Rows}}
+        <tr>
+          <td><input type="checkbox" class="row-chk"></td>
+          <td class="mono">{{$row.Domain}}
+            <input type="hidden" name="domain" value="{{$row.Domain}}">
+          </td>
+          <td class="mono">{{$row.Path}}
+            <input type="hidden" name="path" value="{{$row.Path}}">
+          </td>
+          <td>{{$row.Status}}</td>
+          <td class="muted">{{$row.Note}}</td>
+          <td><input type="text" name="tag" class="row-tag" list="known-tags" value="{{$row.SuggestedTag}}" required></td>
+          <td>
+            <select name="match_type" class="row-match">
+              <option value="exact" {{if eq $row.SuggestedMatch "exact"}}selected{{end}}>exakt</option>
+              <option value="prefix" {{if eq $row.SuggestedMatch "prefix"}}selected{{end}}>Prefix</option>
+              <option value="wildcard" {{if eq $row.SuggestedMatch "wildcard"}}selected{{end}}>Wildcard</option>
+            </select>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    <div style="margin-top:14px;">
+      <button class="primary" type="submit">Regeln übernehmen &amp; Domains taggen</button>
+      <a href="{{.UIPath}}/import" class="btn" style="margin-left:8px;">Abbrechen</a>
+    </div>
+  </form>
+</div>
+<script>
+function toggleAll(src) { document.querySelectorAll('.row-chk').forEach(function(c){ c.checked = src.checked; }); }
+function applyBulk() {
+  var tag = document.getElementById('bulk-tag').value.trim();
+  var match = document.getElementById('bulk-match').value;
+  document.querySelectorAll('tr').forEach(function(tr){
+    var chk = tr.querySelector('.row-chk');
+    if (!chk || !chk.checked) return;
+    if (tag) { var t = tr.querySelector('.row-tag'); if (t) t.value = tag; }
+    if (match) { var m = tr.querySelector('.row-match'); if (m) m.value = match; }
+  });
+}
+</script>
+{{end}}
