@@ -4,6 +4,7 @@ import (
 	"bytes"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -28,7 +29,7 @@ const maxImportBody = 2 << 20 // 2 MiB
 // uiRevision is shown in the UI footer. Bump it whenever the embedded UI
 // changes so a stale plugin binary on disk is immediately visible instead of
 // looking like a broken feature.
-const uiRevision = "2026-08-25 · proxy-hosts"
+const uiRevision = "2026-08-25 · dedupe-rules"
 
 // Zoraxy serves the plugin UI under /plugin.ui/<plugin-id>/ui/, so redirect
 // targets must stay relative to the UI root instead of using uiPath.
@@ -448,6 +449,7 @@ func (s *Service) handleImport(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		added := 0
+		skippedDup := 0
 		for i := range domains {
 			domain := strings.TrimSpace(domains[i])
 			p := strings.TrimSpace(paths[i])
@@ -459,15 +461,24 @@ func (s *Service) handleImport(w http.ResponseWriter, r *http.Request) {
 			if mt == "" {
 				mt = MatchExact
 			}
-			if _, err := s.store.AddRule(PathRule{Path: p, MatchType: mt, Tag: tag, Source: "import", Enabled: true}); err != nil {
+			_, err := s.store.AddRule(PathRule{Path: p, MatchType: mt, Tag: tag, Source: "import", Enabled: true})
+			if errors.Is(err, ErrDuplicateRule) {
+				skippedDup++
+				// Domain-Tag trotzdem setzen — die Regel existiert schon.
+			} else if err != nil {
 				continue
+			} else {
+				added++
 			}
 			if err := s.store.AddDomainTags(domain, []string{tag}); err != nil {
 				continue
 			}
-			added++
 		}
-		redirectWithFlash(w, r, pageRules, fmt.Sprintf("%d Regel(n) aus Import übernommen.", added), "ok")
+		msg := fmt.Sprintf("%d Regel(n) aus Import übernommen.", added)
+		if skippedDup > 0 {
+			msg = fmt.Sprintf("%d neu, %d übersprungen (Pfad+Match schon vorhanden).", added, skippedDup)
+		}
+		redirectWithFlash(w, r, pageRules, msg, "ok")
 	default:
 		http.Error(w, "unknown step", http.StatusBadRequest)
 	}

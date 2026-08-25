@@ -343,6 +343,12 @@ func (s *Store) Rules() []PathRule {
 	return out
 }
 
+var (
+	// ErrDuplicateRule is returned by AddRule when an enabled-or-disabled rule
+	// with the same path and match type already exists (tag may differ).
+	ErrDuplicateRule = fmt.Errorf("Regel mit diesem Pfad und Match-Typ existiert bereits")
+)
+
 func validateRule(r *PathRule) error {
 	r.Path = strings.TrimSpace(r.Path)
 	r.Tag = normalizeTag(r.Tag)
@@ -369,6 +375,8 @@ func validateRule(r *PathRule) error {
 }
 
 // AddRule creates a new path rule and returns it (with a generated ID).
+// Rules that share the same path and match type as an existing entry are
+// rejected with ErrDuplicateRule so imports and manual adds stay idempotent.
 func (s *Store) AddRule(r PathRule) (PathRule, error) {
 	if err := validateRule(&r); err != nil {
 		return PathRule{}, err
@@ -377,6 +385,11 @@ func (s *Store) AddRule(r PathRule) (PathRule, error) {
 	defer s.mu.Unlock()
 	if len(s.data.Rules) >= maxRules {
 		return PathRule{}, fmt.Errorf("maximal %d Regeln erlaubt", maxRules)
+	}
+	for _, existing := range s.data.Rules {
+		if existing.Path == r.Path && existing.MatchType == r.MatchType {
+			return PathRule{}, ErrDuplicateRule
+		}
 	}
 	s.ensureTagLocked(r.Tag)
 	r.ID = newID()
