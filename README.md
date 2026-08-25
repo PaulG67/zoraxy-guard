@@ -22,6 +22,8 @@ Security-Monitor für [Zoraxy](https://github.com/tobychui/zoraxy)-Logs: Exploit
 - **Geprüft-Reiter:** alle stummen Links, Filter nach Domain/Pfad/ID, Alarmierung wieder aktivieren
 - **Push-Filter:** nur Handlungsbedarf, keine geblockten 403, keine bereits geprüften Fingerprints (einstellbar)
 - Threat-Listen-Katalog, Allow-/Blocklist, sensible Hosts
+- **Sperren-Export:** Handlungsbedarf-Zeilen in der History markieren und als JSON für das
+  [`zoraxy-guard-blocker`-Plugin](plugin/zoraxy-guard-blocker/README.md) exportieren (Konfiguration → Sperren-Export)
 
 ---
 
@@ -169,6 +171,17 @@ services:
 Env (optional): `DISCORD_WEBHOOK`, `PUSHOVER_USER_KEY` + `PUSHOVER_API_TOKEN`, `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`, `MIN_SEVERITY`
 
 Beispiel-Config: [`config.example.yaml`](config.example.yaml)
+
+---
+
+## zoraxy-guard-blocker (Plugin)
+
+Zoraxy Guard erkennt und meldet verdächtige Zugriffe — sperrt sie aber selbst nicht.
+Dafür gibt es das eigenständige Zoraxy-Router-Plugin
+[`plugin/zoraxy-guard-blocker/`](plugin/zoraxy-guard-blocker/README.md): Es sperrt einzelne
+Pfade pro Domain direkt am Reverse Proxy mit HTTP 403, gruppiert über frei wählbare Tags. Pfade
+werden manuell gepflegt oder gesammelt aus dem History-Export dieses Projekts importiert — es
+gibt keine Netzwerkverbindung zwischen den beiden Projekten, nur einen Datei-Export/Import.
 
 ---
 

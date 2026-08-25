@@ -289,6 +289,17 @@ function histExclusive(el, otherId) {
     </p>
   </div>
 {% else %}
+  {% if block_export_enabled %}
+  <form id="export-form" method="post" action="{{ url_for('history_export_block') }}" class="card export-bar" style="margin-bottom:10px;">
+    <input type="hidden" name="payload" id="export-payload" value="[]">
+    <div class="soft-refresh-row">
+      <button type="submit" class="primary" id="export-submit" disabled>Ausgewählte für Sperr-Plugin exportieren (0)</button>
+      <button type="button" id="export-select-all">Alle Handlungsbedarf-Zeilen auswählen</button>
+      <button type="button" id="export-select-none">Auswahl aufheben</button>
+      <span class="hint">Erzeugt eine JSON-Datei zum Import im <code>zoraxy-guard-blocker</code>-Plugin — keine Netzwerkverbindung.</span>
+    </div>
+  </form>
+  {% endif %}
   <div class="hist-groups">
     {% for g in data.groups %}
       <details class="card hist-group">
@@ -339,6 +350,7 @@ function histExclusive(el, otherId) {
             <table class="hist-table">
               <thead>
                 <tr>
+                  {% if block_export_enabled %}<th></th>{% endif %}
                   <th>Zeit</th>
                   {% if data.view == 'app' %}<th>Client</th>{% else %}<th>App / Host</th>{% endif %}
                   <th>Land</th>
@@ -355,6 +367,19 @@ function histExclusive(el, otherId) {
               <tbody>
                 {% for s in g.samples %}
                   <tr class="{% if s.blocked %}row-blocked{% endif %} {% if s.risk and s.risk.action_needed %}row-action{% endif %}">
+                    {% if block_export_enabled %}
+                      <td>
+                        {% if s.risk and s.risk.action_needed %}
+                          <input type="checkbox" class="exp-check"
+                                 data-domain="{{ s.origin or (g.key if data.view == 'app' else '') }}"
+                                 data-path="{{ s.path or '/' }}"
+                                 data-status="{{ s.status or '' }}"
+                                 data-method="{{ s.method or 'GET' }}"
+                                 data-note="{{ (s.risk.title or '') if s.risk else '' }}"
+                                 data-ts="{{ s.ts }}">
+                        {% endif %}
+                      </td>
+                    {% endif %}
                     <td class="mono nowrap">{{ time.strftime('%H:%M:%S', time.localtime(s.ts)) }}</td>
                     <td class="mono">
                       {% if data.view == 'app' %}
@@ -405,6 +430,47 @@ function histExclusive(el, otherId) {
 {% endif %}
 </section>
 
+{% if block_export_enabled %}
+<script>
+(function () {
+  function checks() { return Array.prototype.slice.call(document.querySelectorAll('.exp-check')); }
+  function updateSubmitState() {
+    var n = checks().filter(function (c) { return c.checked; }).length;
+    var btn = document.getElementById('export-submit');
+    if (btn) {
+      btn.disabled = n === 0;
+      btn.textContent = 'Ausgewählte für Sperr-Plugin exportieren (' + n + ')';
+    }
+  }
+  checks().forEach(function (c) { c.addEventListener('change', updateSubmitState); });
+  var selAll = document.getElementById('export-select-all');
+  if (selAll) selAll.addEventListener('click', function () {
+    checks().forEach(function (c) { c.checked = true; });
+    updateSubmitState();
+  });
+  var selNone = document.getElementById('export-select-none');
+  if (selNone) selNone.addEventListener('click', function () {
+    checks().forEach(function (c) { c.checked = false; });
+    updateSubmitState();
+  });
+  var form = document.getElementById('export-form');
+  if (form) form.addEventListener('submit', function () {
+    var rows = checks().filter(function (c) { return c.checked; }).map(function (c) {
+      return {
+        domain: c.dataset.domain || '',
+        path: c.dataset.path || '/',
+        status: c.dataset.status ? parseInt(c.dataset.status, 10) : null,
+        method: c.dataset.method || 'GET',
+        note: c.dataset.note || '',
+        ts: c.dataset.ts ? parseFloat(c.dataset.ts) : null,
+      };
+    });
+    document.getElementById('export-payload').value = JSON.stringify(rows);
+  });
+  updateSubmitState();
+})();
+</script>
+{% endif %}
 <script src="{{ url_for('static', filename='status_live.js') }}"></script>
 <script>
 (function () {

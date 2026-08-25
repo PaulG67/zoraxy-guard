@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import secrets
@@ -12,6 +13,7 @@ from typing import Any, Callable, Optional
 import yaml
 from flask import (
     Flask,
+    Response,
     flash,
     jsonify,
     redirect,
@@ -442,6 +444,9 @@ def create_app(config_path: str) -> Flask:
         mem = rt.RUNTIME.memory_state()
         with rt.RUNTIME.lock:
             backfill = dict(rt.RUNTIME.backfill)
+        block_export_enabled = bool(
+            (rt.RUNTIME.cfg.get("block_export") or {}).get("enabled")
+        )
         return render_template(
             "history.html",
             data=data,
@@ -450,6 +455,80 @@ def create_app(config_path: str) -> Flask:
             backfill=backfill,
             backfill_hours=HOURS_OPTIONS,
             api_status_url=url_for("api_status"),
+            block_export_enabled=block_export_enabled,
+        )
+
+    @app.route("/history/export-block", methods=["POST"])
+    @login_required
+    def history_export_block():
+        """Export selected 'Handlungsbedarf' entries as JSON for manual import into
+        the zoraxy-guard-blocker plugin (Sperren per Tag). No network call — file only."""
+        if not rt.RUNTIME:
+            flash("Runtime nicht bereit.", "error")
+            return redirect(url_for("dashboard"))
+        enabled = bool((rt.RUNTIME.cfg.get("block_export") or {}).get("enabled"))
+        if not enabled:
+            flash("Sperren-Export ist deaktiviert (siehe Konfiguration).", "error")
+            return redirect(url_for("history_page"))
+
+        raw = request.form.get("payload") or "[]"
+        try:
+            rows = json.loads(raw)
+        except (TypeError, ValueError):
+            rows = []
+        if not isinstance(rows, list) or not rows:
+            flash("Keine Einträge ausgewählt.", "error")
+            return redirect(url_for("history_page"))
+
+        entries = []
+        seen = set()
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            domain = (row.get("domain") or "").strip().lower().rstrip(".")
+            path = (row.get("path") or "").strip() or "/"
+            if not domain or not path:
+                continue
+            key = (domain, path)
+            if key in seen:
+                continue
+            seen.add(key)
+            status = row.get("status")
+            try:
+                status = int(status) if status not in (None, "") else None
+            except (TypeError, ValueError):
+                status = None
+            try:
+                ts = float(row.get("ts") or 0) or time.time()
+            except (TypeError, ValueError):
+                ts = time.time()
+            entries.append(
+                {
+                    "domain": domain,
+                    "path": path,
+                    "method": (row.get("method") or "GET").strip().upper()[:10],
+                    "status": status,
+                    "note": (row.get("note") or "")[:200],
+                    "ts": ts,
+                }
+            )
+
+        if not entries:
+            flash("Keine gültigen Einträge in der Auswahl.", "error")
+            return redirect(url_for("history_page"))
+
+        payload = {
+            "format": "zoraxy-guard-blocker/import-v1",
+            "source": "zoraxy-guard",
+            "exported_at": time.time(),
+            "entries": entries,
+        }
+        body = json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
+        filename = f"zoraxy-guard-block-export-{int(time.time())}.json"
+        return Response(
+            body,
+            mimetype="application/json",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
         )
 
     @app.route("/crowdsec", methods=["GET", "POST"])
@@ -595,6 +674,10 @@ def create_app(config_path: str) -> Flask:
                         disk["lists_refresh_hours"] = 24
 
                     disk["alert_sensitive_success"] = request.form.get("alert_sensitive_success") == "on"
+
+                    if not isinstance(disk.get("block_export"), dict):
+                        disk["block_export"] = {}
+                    disk["block_export"]["enabled"] = request.form.get("block_export_enabled") == "on"
 
                     a = disk["alerts"]
                     a["min_severity"] = request.form.get("min_severity", "medium").strip()
