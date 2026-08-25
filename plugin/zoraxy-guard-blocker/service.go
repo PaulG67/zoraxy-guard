@@ -28,7 +28,7 @@ const maxImportBody = 2 << 20 // 2 MiB
 // uiRevision is shown in the UI footer. Bump it whenever the embedded UI
 // changes so a stale plugin binary on disk is immediately visible instead of
 // looking like a broken feature.
-const uiRevision = "2026-08-25 · post-json"
+const uiRevision = "2026-08-25 · sandbox-forms"
 
 // Zoraxy serves the plugin UI under /plugin.ui/<plugin-id>/ui/, so redirect
 // targets must stay relative to the UI root instead of using uiPath.

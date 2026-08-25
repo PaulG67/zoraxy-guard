@@ -93,31 +93,110 @@
         'flash=' + encodeURIComponent(flash) +
         '&flash_kind=' + encodeURIComponent(kind || 'ok');
     }
-    window.location.assign(dest);
+    // location.assign ignores <base>; resolve against the current page URL.
+    window.location.assign(new URL(dest, window.location.href).href);
   }
 
-  // Zoraxy protects its whole web panel with gorilla/csrf, and this UI is
-  // proxied through it. POSTs go out with X-CSRF-Token. The server answers
-  // with JSON (not a 303): following redirects through the plugin reverse
-  // proxy breaks the iframe Location, so a client-side navigation is safer.
+  function postForm(form) {
+    var data = new FormData(form);
+    var hasUpload = false;
+    data.forEach(function (value) {
+      if (value instanceof File && value.name !== '') hasUpload = true;
+    });
+    var target = form.getAttribute('action') || form.action || '.';
+    var out = document.getElementById('diag-out');
+    if (out) {
+      out.hidden = false;
+      out.textContent = 'Speichere → ' + target + ' …';
+    }
+
+    return fetch(target, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'X-CSRF-Token': csrfToken,
+        'Accept': 'application/json',
+        'X-Requested-With': 'fetch'
+      },
+      body: hasUpload ? data : new URLSearchParams(data)
+    }).then(function (res) {
+      return res.text().then(function (text) {
+        if (out) {
+          out.textContent =
+            'HTTP ' + res.status + ' → ' + target + '\n' +
+            text.slice(0, 1500);
+        }
+        if (!res.ok) {
+          throw new Error('HTTP ' + res.status + ' — ' + text.slice(0, 300));
+        }
+        var trimmed = (text || '').replace(/^\s+/, '');
+        if (trimmed.charAt(0) === '{') {
+          try {
+            var j = JSON.parse(text);
+            goAfterSave(j.redirect || target, j.flash || '', j.flash_kind || 'ok');
+            return;
+          } catch (e) { /* fall through to HTML */ }
+        }
+        document.open('text/html', 'replace');
+        document.write(text);
+        document.close();
+      });
+    });
+  }
+
+  // Zoraxy embeds plugin UIs in <iframe sandbox="allow-scripts allow-same-origin">
+  // WITHOUT allow-forms. Native form submit (and often the submit event itself)
+  // is blocked by the browser — clicks appear to do nothing. All POST actions
+  // must therefore go through a button click + fetch, never form.submit().
+  document.addEventListener('click', function (ev) {
+    var btn = ev.target && ev.target.closest
+      ? ev.target.closest('button[data-post], button.primary, button.danger, button[type="submit"]')
+      : null;
+    if (!btn || btn.id === 'diag-run') return;
+    var form = btn.closest('form');
+    if (!form) return;
+    if ((form.method || 'get').toLowerCase() !== 'post') return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    if (btn.getAttribute('data-confirm')) {
+      if (!window.confirm(btn.getAttribute('data-confirm'))) return;
+    }
+    postForm(form).catch(function (err) {
+      showError('Speichern fehlgeschlagen: ' + err.message);
+    });
+  }, true);
+
+  // Also swallow any submit that slips through (e.g. Enter in an input).
   document.addEventListener('submit', function (ev) {
-    if (ev.defaultPrevented) return;
     var form = ev.target;
     if (!form || form.tagName !== 'FORM') return;
     if ((form.method || 'get').toLowerCase() !== 'post') return;
     ev.preventDefault();
+    postForm(form).catch(function (err) {
+      showError('Speichern fehlgeschlagen: ' + err.message);
+    });
+  }, true);
 
-    try {
-      var data = new FormData(form);
-      var hasUpload = false;
-      data.forEach(function (value) {
-        if (value instanceof File && value.name !== '') hasUpload = true;
-      });
-      // Prefer the raw action attribute: form.action can resolve against a
-      // rewritten base and point outside /plugin.ui/<id>/.
-      var target = form.getAttribute('action') || form.action || '.';
-
-      fetch(target, {
+  var diagBtn = document.getElementById('diag-run');
+  if (diagBtn) diagBtn.addEventListener('click', function () {
+    var out = document.getElementById('diag-out');
+    out.hidden = false;
+    out.textContent = 'läuft…';
+    var probe = new URLSearchParams({
+      action: 'add',
+      path: '/.zgb-selftest',
+      match_type: 'exact',
+      tag: 'selftest',
+      note: 'Diagnose-Probe'
+    });
+    Promise.all([
+      fetch('selftest', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: new URLSearchParams({ probe: 'hallo-welt' })
+      }).then(function (r) { return r.text().then(function (t) { return { status: r.status, url: r.url, text: t }; }); }),
+      fetch('rules', {
         method: 'POST',
         credentials: 'same-origin',
         headers: {
@@ -125,51 +204,16 @@
           'Accept': 'application/json',
           'X-Requested-With': 'fetch'
         },
-        body: hasUpload ? data : new URLSearchParams(data)
-      }).then(function (res) {
-        return res.text().then(function (text) {
-          if (!res.ok) {
-            throw new Error('HTTP ' + res.status + ' — ' + text.slice(0, 300));
-          }
-          var trimmed = (text || '').replace(/^\s+/, '');
-          if (trimmed.charAt(0) === '{') {
-            try {
-              var j = JSON.parse(text);
-              goAfterSave(j.redirect || target, j.flash || '', j.flash_kind || 'ok');
-              return;
-            } catch (e) { /* fall through to HTML */ }
-          }
-          // Import preview and other handlers still return a full HTML page.
-          document.open('text/html', 'replace');
-          document.write(text);
-          document.close();
-        });
-      }).catch(function (err) {
-        showError('Speichern fehlgeschlagen: ' + err.message);
-      });
-    } catch (err) {
-      showError('Absenden fehlgeschlagen: ' + err.message);
-    }
-  });
-
-  var diagBtn = document.getElementById('diag-run');
-  if (diagBtn) diagBtn.addEventListener('click', function () {
-    var out = document.getElementById('diag-out');
-    out.hidden = false;
-    out.textContent = 'läuft…';
-    fetch('selftest', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'X-CSRF-Token': csrfToken },
-      body: new URLSearchParams({ probe: 'hallo-welt' })
-    }).then(function (res) {
-      return res.text().then(function (text) {
-        out.textContent =
-          'HTTP ' + res.status + ' ' + res.statusText + '\n' +
-          'Ziel: ' + res.url + '\n' +
-          'Token im Browser: ' + (csrfToken ? csrfToken.length + ' Zeichen' : 'FEHLT') + '\n' +
-          '----------------\n' + text.slice(0, 4000);
-      });
+        body: probe
+      }).then(function (r) { return r.text().then(function (t) { return { status: r.status, url: r.url, text: t }; }); })
+    ]).then(function (pair) {
+      var st = pair[0], add = pair[1];
+      out.textContent =
+        'Token im Browser: ' + (csrfToken ? csrfToken.length + ' Zeichen' : 'FEHLT') + '\n\n' +
+        '--- selftest HTTP ' + st.status + ' ---\n' + st.text.slice(0, 2000) + '\n\n' +
+        '--- rules add HTTP ' + add.status + ' ---\n' +
+        'Ziel: ' + add.url + '\n' +
+        add.text.slice(0, 2000);
     }).catch(function (err) {
       out.textContent = 'Verbindung fehlgeschlagen: ' + err.message;
     });
@@ -282,7 +326,7 @@
       </div>
       <div style="flex:0;">
         <label>&nbsp;</label>
-        <button class="primary" type="submit">Hinzufügen</button>
+        <button class="primary" type="button" data-post>Hinzufügen</button>
       </div>
     </div>
   </form>
@@ -306,16 +350,16 @@
           <form method="post" action="rules" style="display:inline;">
             <input type="hidden" name="action" value="toggle">
             <input type="hidden" name="id" value="{{.ID}}">
-            <button type="submit">{{if .Enabled}}aktiv – deaktivieren{{else}}inaktiv – aktivieren{{end}}</button>
+            <button type="button" data-post>{{if .Enabled}}aktiv – deaktivieren{{else}}inaktiv – aktivieren{{end}}</button>
           </form>
         </td>
         <td>{{.Hits}}</td>
         <td class="muted">{{.Note}}</td>
         <td>
-          <form method="post" action="rules" style="display:inline;" onsubmit="return confirm('Regel löschen?');">
+          <form method="post" action="rules" style="display:inline;">
             <input type="hidden" name="action" value="delete">
             <input type="hidden" name="id" value="{{.ID}}">
-            <button type="submit" class="danger">Löschen</button>
+            <button type="button" class="danger" data-post data-confirm="Regel löschen?">Löschen</button>
           </form>
         </td>
       </tr>
@@ -349,7 +393,7 @@
       </div>
       <div style="flex:0;">
         <label>&nbsp;</label>
-        <button class="primary" type="submit">Speichern</button>
+        <button class="primary" type="button" data-post>Speichern</button>
       </div>
     </div>
   </form>
@@ -369,10 +413,10 @@
         <td class="mono">{{.Domain}}</td>
         <td>{{range .Tags}}<span class="chip tag">{{.}}</span>{{end}}</td>
         <td>
-          <form method="post" action="domains" style="display:inline;" onsubmit="return confirm('Domain-Zuweisung löschen?');">
+          <form method="post" action="domains" style="display:inline;">
             <input type="hidden" name="action" value="delete">
             <input type="hidden" name="domain" value="{{.Domain}}">
-            <button type="submit" class="danger">Löschen</button>
+            <button type="button" class="danger" data-post data-confirm="Domain-Zuweisung löschen?">Löschen</button>
           </form>
         </td>
       </tr>
@@ -398,7 +442,7 @@
     <label>… oder JSON einfügen</label>
     <textarea name="raw_json" rows="8" placeholder='{"entries": [...] }'></textarea>
     <div style="margin-top:12px;">
-      <button class="primary" type="submit">Weiter zur Tag-Auswahl</button>
+      <button class="primary" type="button" data-post>Weiter zur Tag-Auswahl</button>
     </div>
   </form>
 </div>
@@ -463,7 +507,7 @@
       </tbody>
     </table>
     <div style="margin-top:14px;">
-      <button class="primary" type="submit">Regeln übernehmen &amp; Domains taggen</button>
+      <button class="primary" type="button" data-post>Regeln übernehmen &amp; Domains taggen</button>
       <a href="import" class="btn" style="margin-left:8px;">Abbrechen</a>
     </div>
   </form>
