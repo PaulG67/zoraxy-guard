@@ -46,6 +46,21 @@
   select.tag-pick { margin-top:6px; font-size:0.82rem; color:var(--muted); }
   .foot { margin-top:24px; padding-top:12px; border-top:1px solid var(--border); display:flex; align-items:center; gap:12px; flex-wrap:wrap; font-size:0.82rem; }
   .foot pre { flex-basis:100%; margin:0; background:#0e131e; border:1px solid var(--border); border-radius:7px; padding:10px 12px; overflow:auto; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:0.78rem; white-space:pre-wrap; }
+  .win-tabs { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+  .win-tabs a { padding:6px 12px; border-radius:8px; border:1px solid var(--border); color:var(--muted); }
+  .win-tabs a.active { background:var(--accent); border-color:transparent; color:#04150f; font-weight:600; text-decoration:none; }
+  .hit-chart { width:100%; height:auto; display:block; }
+  .chart-grid { stroke:var(--border); stroke-width:1; }
+  .chart-axis { fill:var(--muted); font-size:11px; font-family:inherit; }
+  .chart-bar { fill:var(--accent); opacity:0.9; }
+  .chart-bar:hover { opacity:1; filter:brightness(1.1); }
+  .stat-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; }
+  .stat-big { font-size:2rem; font-weight:700; color:var(--accent); margin:4px 0 0; }
+  .rank-bar { display:flex; align-items:center; gap:8px; margin:5px 0; font-size:0.84rem; }
+  .rank-bar .name { flex:0 1 45%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .rank-bar .track { flex:1; height:8px; background:#0e131e; border-radius:999px; overflow:hidden; }
+  .rank-bar .fill { height:100%; background:var(--accent); border-radius:999px; }
+  .rank-bar .n { flex:0 0 auto; color:var(--muted); font-variant-numeric:tabular-nums; min-width:2.5em; text-align:right; }
 </style>
 </head>
 <body>
@@ -56,6 +71,7 @@
       <a href="." class="{{if eq .Active "dashboard"}}active{{end}}">Übersicht</a>
       <a href="rules" class="{{if eq .Active "rules"}}active{{end}}">Pfad-Regeln</a>
       <a href="domains" class="{{if eq .Active "domains"}}active{{end}}">Domains</a>
+      <a href="stats" class="{{if eq .Active "stats"}}active{{end}}">Statistik</a>
       <a href="import" class="{{if eq .Active "import"}}active{{end}}">Import</a>
     </nav>
   </header>
@@ -459,6 +475,70 @@
     </tbody>
   </table>
   {{end}}
+</div>
+{{end}}
+
+{{define "stats"}}
+<div class="card">
+  <h3 style="margin-top:0;">Blockierte Anfragen</h3>
+  <p class="hint">Nur Treffer seit dem Update mit Hit-Protokoll (ältere Gesamttreffer in den Pfad-Regeln zählen hier nicht rückwirkend). Aufzeichnung max. 14 Tage / 20 000 Events.</p>
+  <div class="win-tabs">
+    <a href="stats?w=24h" class="{{if eq .Window "24h"}}active{{end}}">24 Stunden</a>
+    <a href="stats?w=7d" class="{{if eq .Window "7d"}}active{{end}}">7 Tage</a>
+    <a href="stats?w=14d" class="{{if eq .Window "14d"}}active{{end}}">14 Tage</a>
+  </div>
+  <div class="stat-big">{{.Total}}</div>
+  <div class="hint" style="margin-bottom:12px;">
+    {{if eq .Window "24h"}}Blockierungen in den letzten 24 Stunden (pro Stunde){{end}}
+    {{if eq .Window "7d"}}Blockierungen in den letzten 7 Tagen (pro Tag){{end}}
+    {{if eq .Window "14d"}}Blockierungen in den letzten 14 Tagen (pro Tag){{end}}
+  </div>
+  {{.Chart}}
+</div>
+
+<div class="stat-grid">
+  <div class="card">
+    <h3 style="margin-top:0;">Top-Pfade</h3>
+    {{if not .TopPaths}}
+      <p class="muted">Noch keine Treffer im Zeitraum.</p>
+    {{else}}
+      {{range .TopPaths}}
+      <div class="rank-bar" title="{{.Name}}">
+        <span class="name mono">{{.Name}}</span>
+        <span class="track"><span class="fill" style="width:{{.Pct}}%"></span></span>
+        <span class="n">{{.Count}}</span>
+      </div>
+      {{end}}
+    {{end}}
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0;">Top-Tags</h3>
+    {{if not .TopTags}}
+      <p class="muted">—</p>
+    {{else}}
+      {{range .TopTags}}
+      <div class="rank-bar">
+        <span class="name"><span class="chip tag">{{.Name}}</span></span>
+        <span class="track"><span class="fill" style="width:{{.Pct}}%"></span></span>
+        <span class="n">{{.Count}}</span>
+      </div>
+      {{end}}
+    {{end}}
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0;">Top-Domains</h3>
+    {{if not .TopDomains}}
+      <p class="muted">—</p>
+    {{else}}
+      {{range .TopDomains}}
+      <div class="rank-bar" title="{{.Name}}">
+        <span class="name mono">{{.Name}}</span>
+        <span class="track"><span class="fill" style="width:{{.Pct}}%"></span></span>
+        <span class="n">{{.Count}}</span>
+      </div>
+      {{end}}
+    {{end}}
+  </div>
 </div>
 {{end}}
 

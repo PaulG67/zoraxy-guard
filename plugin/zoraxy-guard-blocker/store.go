@@ -62,7 +62,23 @@ type dataFile struct {
 	Tags       []Tag        `json:"tags"`
 	DomainTags []DomainTags `json:"domain_tags"`
 	Rules      []PathRule   `json:"rules"`
+	HitLog     []HitEvent   `json:"hit_log,omitempty"`
 }
+
+// HitEvent is one blocked request, kept for a rolling window so the stats
+// page can chart activity over time (not just lifetime counters on PathRule).
+type HitEvent struct {
+	TS     int64  `json:"ts"`
+	RuleID string `json:"rule_id"`
+	Path   string `json:"path"`
+	Tag    string `json:"tag"`
+	Domain string `json:"domain"`
+}
+
+const (
+	maxHitEvents    = 20000
+	hitRetentionSec = 14 * 24 * 60 * 60 // 14 days
+)
 
 // Store is the JSON-file backed, mutex-protected persistence layer for this
 // plugin. It intentionally stays a single small file — no database
@@ -84,7 +100,7 @@ func NewStore(path string) (*Store, error) {
 func (s *Store) load() error {
 	raw, err := os.ReadFile(s.path)
 	if os.IsNotExist(err) {
-		s.data = dataFile{Tags: []Tag{}, DomainTags: []DomainTags{}, Rules: []PathRule{}}
+		s.data = dataFile{Tags: []Tag{}, DomainTags: []DomainTags{}, Rules: []PathRule{}, HitLog: []HitEvent{}}
 		return nil
 	}
 	if err != nil {
@@ -102,6 +118,9 @@ func (s *Store) load() error {
 	}
 	if df.Rules == nil {
 		df.Rules = []PathRule{}
+	}
+	if df.HitLog == nil {
+		df.HitLog = []HitEvent{}
 	}
 	s.data = df
 	return nil
@@ -437,19 +456,173 @@ func (s *Store) DeleteRule(id string) error {
 	return s.saveLocked()
 }
 
-// RecordHit increments the hit counter for a rule (best-effort; errors are
-// swallowed by the caller since this must never affect the block decision).
-func (s *Store) RecordHit(id string) {
+// RecordHit increments the hit counter for a rule and appends a timed event
+// for the stats chart. Best-effort: errors are swallowed by the caller since
+// this must never affect the block decision.
+func (s *Store) RecordHit(id, domain string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	now := time.Now().Unix()
+	var path, tag string
+	found := false
 	for i := range s.data.Rules {
 		if s.data.Rules[i].ID == id {
 			s.data.Rules[i].Hits++
-			s.data.Rules[i].LastHitAt = time.Now().Unix()
-			_ = s.saveLocked()
-			return
+			s.data.Rules[i].LastHitAt = now
+			path = s.data.Rules[i].Path
+			tag = s.data.Rules[i].Tag
+			found = true
+			break
 		}
 	}
+	if !found {
+		return
+	}
+	s.data.HitLog = append(s.data.HitLog, HitEvent{
+		TS:     now,
+		RuleID: id,
+		Path:   path,
+		Tag:    tag,
+		Domain: normalizeDomain(domain),
+	})
+	s.pruneHitLogLocked(now)
+	_ = s.saveLocked()
+}
+
+func (s *Store) pruneHitLogLocked(now int64) {
+	cutoff := now - hitRetentionSec
+	kept := s.data.HitLog[:0]
+	for _, h := range s.data.HitLog {
+		if h.TS >= cutoff {
+			kept = append(kept, h)
+		}
+	}
+	s.data.HitLog = kept
+	if len(s.data.HitLog) > maxHitEvents {
+		s.data.HitLog = s.data.HitLog[len(s.data.HitLog)-maxHitEvents:]
+	}
+}
+
+// HitStats summarises blocked requests for the stats page chart.
+type HitStats struct {
+	Window     string
+	Buckets    []HitBucket
+	Total      int64
+	TopPaths   []HitRank
+	TopTags    []HitRank
+	TopDomains []HitRank
+}
+
+type HitBucket struct {
+	Label string
+	Count int64
+}
+
+type HitRank struct {
+	Name  string
+	Count int64
+	Pct   int // 0–100 relative to the top entry, for the bar width
+}
+
+// Stats returns bucketed hit counts for window "24h", "7d", or "14d".
+func (s *Store) Stats(window string) HitStats {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	now := time.Now()
+	var bucketDur time.Duration
+	var nBuckets int
+	switch window {
+	case "7d":
+		bucketDur = 24 * time.Hour
+		nBuckets = 7
+	case "14d":
+		bucketDur = 24 * time.Hour
+		nBuckets = 14
+	default:
+		window = "24h"
+		bucketDur = time.Hour
+		nBuckets = 24
+	}
+
+	var bucketStart time.Time
+	if bucketDur == time.Hour {
+		bucketStart = time.Date(now.Year(), now.Month(), now.Day(), now.Hour(), 0, 0, 0, now.Location()).
+			Add(-time.Duration(nBuckets-1) * time.Hour)
+	} else {
+		today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+		bucketStart = today.Add(-time.Duration(nBuckets-1) * 24 * time.Hour)
+	}
+	since := bucketStart
+
+	buckets := make([]HitBucket, nBuckets)
+	for i := 0; i < nBuckets; i++ {
+		t := bucketStart.Add(time.Duration(i) * bucketDur)
+		label := t.Format("15:04")
+		if bucketDur >= 24*time.Hour {
+			label = t.Format("02.01")
+		}
+		buckets[i] = HitBucket{Label: label}
+	}
+
+	pathCount := map[string]int64{}
+	tagCount := map[string]int64{}
+	domainCount := map[string]int64{}
+	var total int64
+	sinceUnix := since.Unix()
+
+	for _, h := range s.data.HitLog {
+		if h.TS < sinceUnix {
+			continue
+		}
+		total++
+		pathCount[h.Path]++
+		if h.Tag != "" {
+			tagCount[h.Tag]++
+		}
+		if h.Domain != "" {
+			domainCount[h.Domain]++
+		}
+		idx := int(time.Unix(h.TS, 0).Sub(bucketStart) / bucketDur)
+		if idx >= 0 && idx < nBuckets {
+			buckets[idx].Count++
+		}
+	}
+
+	return HitStats{
+		Window:     window,
+		Buckets:    buckets,
+		Total:      total,
+		TopPaths:   topN(pathCount, 10),
+		TopTags:    topN(tagCount, 8),
+		TopDomains: topN(domainCount, 8),
+	}
+}
+
+func topN(m map[string]int64, n int) []HitRank {
+	out := make([]HitRank, 0, len(m))
+	for k, v := range m {
+		out = append(out, HitRank{Name: k, Count: v})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Count != out[j].Count {
+			return out[i].Count > out[j].Count
+		}
+		return out[i].Name < out[j].Name
+	})
+	if len(out) > n {
+		out = out[:n]
+	}
+	if len(out) > 0 && out[0].Count > 0 {
+		top := out[0].Count
+		for i := range out {
+			out[i].Pct = int(out[i].Count * 100 / top)
+			if out[i].Pct == 0 && out[i].Count > 0 {
+				out[i].Pct = 1
+			}
+		}
+	}
+	return out
 }
 
 // MatchBlocked decides whether an incoming request (identified by hostname +

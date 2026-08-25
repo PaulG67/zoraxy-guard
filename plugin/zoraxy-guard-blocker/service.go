@@ -29,7 +29,7 @@ const maxImportBody = 2 << 20 // 2 MiB
 // uiRevision is shown in the UI footer. Bump it whenever the embedded UI
 // changes so a stale plugin binary on disk is immediately visible instead of
 // looking like a broken feature.
-const uiRevision = "2026-08-25 · no-modals"
+const uiRevision = "2026-08-25 · stats-chart"
 
 // Zoraxy serves the plugin UI under /plugin.ui/<plugin-id>/ui/, so redirect
 // targets must stay relative to the UI root instead of using uiPath.
@@ -37,6 +37,7 @@ const (
 	pageRules   = "rules"
 	pageDomains = "domains"
 	pageImport  = "import"
+	pageStats   = "stats"
 )
 
 //go:embed www/ui.tmpl
@@ -73,6 +74,7 @@ func (s *Service) registerRoutes() {
 	s.mux.HandleFunc(uiPath+"/rules", s.handleRules)
 	s.mux.HandleFunc(uiPath+"/domains", s.handleDomains)
 	s.mux.HandleFunc(uiPath+"/import", s.handleImport)
+	s.mux.HandleFunc(uiPath+"/stats", s.handleStats)
 	s.mux.HandleFunc(uiPath+"/selftest", s.handleSelftest)
 	s.mux.HandleFunc(sniffPath+"/", s.handleSniff)
 	s.mux.HandleFunc(capturePath+"/", s.handleCapture)
@@ -346,6 +348,25 @@ func (s *Service) handleRulesPost(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---------------------------------------------------------------------------
+// Stats page
+// ---------------------------------------------------------------------------
+
+func (s *Service) handleStats(w http.ResponseWriter, r *http.Request) {
+	window := strings.TrimSpace(r.URL.Query().Get("w"))
+	switch window {
+	case "7d", "14d", "24h":
+	default:
+		window = "24h"
+	}
+	st := s.store.Stats(window)
+	data := struct {
+		HitStats
+		Chart template.HTML
+	}{st, renderHitChart(st.Buckets)}
+	s.render(w, r, "stats", "Statistik", "stats", data, "", "")
+}
+
+// ---------------------------------------------------------------------------
 // Domains page
 // ---------------------------------------------------------------------------
 
@@ -530,7 +551,7 @@ func (s *Service) handleSniff(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("SKIP"))
 		return
 	}
-	s.store.RecordHit(rule.ID)
+	s.store.RecordHit(rule.ID, req.Hostname)
 	s.captures.put(r.Header.Get("X-Zoraxy-RequestID"), rule)
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK"))
