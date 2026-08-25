@@ -1,9 +1,8 @@
 // Package zoraxy_plugin is a small, vendored copy of the plugin lifecycle
 // contract described in the Zoraxy plugin documentation
-// (https://zoraxy.aroz.org/plugins/). It intentionally only implements what
-// this plugin needs (Router plugin, dynamic capture, plugin UI) — no calls
-// back into the Zoraxy management API are made, so PermittedAPIEndpoints /
-// APIKey handling is not required here.
+// (https://zoraxy.aroz.org/plugins/). It covers Router plugins, dynamic
+// capture, the plugin UI, and optional PermittedAPIEndpoints / APIKey for
+// calling back into Zoraxy's management API (e.g. /plugin/api/proxy/list).
 package zoraxy_plugin
 
 import (

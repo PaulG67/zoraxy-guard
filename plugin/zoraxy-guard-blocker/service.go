@@ -28,7 +28,7 @@ const maxImportBody = 2 << 20 // 2 MiB
 // uiRevision is shown in the UI footer. Bump it whenever the embedded UI
 // changes so a stale plugin binary on disk is immediately visible instead of
 // looking like a broken feature.
-const uiRevision = "2026-08-25 · sandbox-forms"
+const uiRevision = "2026-08-25 · proxy-hosts"
 
 // Zoraxy serves the plugin UI under /plugin.ui/<plugin-id>/ui/, so redirect
 // targets must stay relative to the UI root instead of using uiPath.
@@ -353,10 +353,18 @@ func (s *Service) handleDomains(w http.ResponseWriter, r *http.Request) {
 		s.handleDomainsPost(w, r)
 		return
 	}
+	hosts, hostsErr := listZoraxyProxyHosts(s.cfg)
+	hostsErrMsg := ""
+	if hostsErr != nil {
+		hostsErrMsg = hostsErr.Error()
+		log.Printf("domains: proxy host list: %v", hostsErr)
+	}
 	data := struct {
-		Tags    []Tag
-		Domains []DomainTags
-	}{s.store.Tags(), s.store.DomainTags()}
+		Tags          []Tag
+		Domains       []DomainTags
+		ProxyHosts    []string
+		ProxyHostsErr string
+	}{s.store.Tags(), s.store.DomainTags(), hosts, hostsErrMsg}
 	s.render(w, r, "domains", "Domains", "domains", data, flashFromQuery(r), flashKindFromQuery(r))
 }
 

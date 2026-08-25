@@ -379,7 +379,17 @@
     <div class="row">
       <div>
         <label>Domain</label>
-        <input type="text" name="domain" placeholder="files.gehring.li" required>
+        <input type="text" name="domain" id="domain-input" list="proxy-hosts" placeholder="files.gehring.li" required>
+        {{if .ProxyHosts}}
+        <select class="tag-pick" data-target="domain-input">
+          <option value="">— Domain aus Zoraxy wählen —</option>
+          {{range .ProxyHosts}}<option value="{{.}}">{{.}}</option>{{end}}
+        </select>
+        {{else if .ProxyHostsErr}}
+        <p class="hint" style="margin:6px 0 0; color:var(--err);">Zoraxy-Domainliste nicht geladen: {{.ProxyHostsErr}}</p>
+        {{else}}
+        <p class="hint" style="margin:6px 0 0;">Keine HTTP-Proxy-Domains von Zoraxy gemeldet — Domain manuell eintragen.</p>
+        {{end}}
       </div>
       <div>
         <label>Tags (Komma-getrennt)</label>
@@ -398,6 +408,7 @@
     </div>
   </form>
   <datalist id="known-tags">{{range .Tags}}<option value="{{.Name}}">{{end}}</datalist>
+  <datalist id="proxy-hosts">{{range .ProxyHosts}}<option value="{{.}}">{{end}}</datalist>
 </div>
 
 <div class="card">

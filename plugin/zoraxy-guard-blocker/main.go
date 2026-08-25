@@ -45,9 +45,15 @@ func spec() *plugin.IntroSpect {
 		DynamicCaptureSniff:   sniffPath,
 		DynamicCaptureIngress: capturePath,
 		UIPath:                uiPath,
-		// No PermittedAPIEndpoints: this plugin never calls back into the
-		// Zoraxy management API. Domain<->tag assignment is maintained
-		// entirely inside this plugin (see README "Einrichtung").
+		// Ask Zoraxy for an API key so the Domains page can offer a picker of
+		// configured HTTP Proxy hostnames (POST /plugin/api/proxy/list).
+		PermittedAPIEndpoints: []plugin.PermittedAPIEndpoint{
+			{
+				Method:   "POST",
+				Endpoint: "/plugin/api/proxy/list",
+				Reason:   "Domains-Auswahl: HTTP-Proxy-Hostnamen aus Zoraxy laden",
+			},
+		},
 	}
 }
 
