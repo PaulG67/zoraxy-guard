@@ -4,6 +4,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Zoraxy proxies this UI under /plugin.ui/<plugin-id>/ui/, so every link and
+     form action below must stay relative to this base. -->
+<base href="./">
 <title>{{.Title}} · Zoraxy Guard Blocker</title>
 <style>
   :root { --bg:#0f1420; --panel:#161d2d; --border:#28324a; --text:#e7ecf5; --muted:#8f9bb3; --accent:#5ec2a4; --warn:#f0b429; --err:#f07178; }
@@ -46,10 +49,10 @@
   <header class="bar">
     <h1>🛡 Zoraxy Guard Blocker</h1>
     <nav>
-      <a href="{{.UIPath}}/" class="{{if eq .Active "dashboard"}}active{{end}}">Übersicht</a>
-      <a href="{{.UIPath}}/rules" class="{{if eq .Active "rules"}}active{{end}}">Pfad-Regeln</a>
-      <a href="{{.UIPath}}/domains" class="{{if eq .Active "domains"}}active{{end}}">Domains</a>
-      <a href="{{.UIPath}}/import" class="{{if eq .Active "import"}}active{{end}}">Import</a>
+      <a href="." class="{{if eq .Active "dashboard"}}active{{end}}">Übersicht</a>
+      <a href="rules" class="{{if eq .Active "rules"}}active{{end}}">Pfad-Regeln</a>
+      <a href="domains" class="{{if eq .Active "domains"}}active{{end}}">Domains</a>
+      <a href="import" class="{{if eq .Active "import"}}active{{end}}">Import</a>
     </nav>
   </header>
   {{if .Flash}}<div class="flash {{.FlashKind}}">{{.Flash}}</div>{{end}}
@@ -112,7 +115,7 @@
 {{define "rules"}}
 <div class="card">
   <h3 style="margin-top:0;">Neue Pfad-Regel (manueller Eintrag)</h3>
-  <form method="post" action="{{.UIPath}}/rules">
+  <form method="post" action="rules">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <input type="hidden" name="action" value="add">
     <div class="row">
@@ -159,7 +162,7 @@
         <td>{{.MatchType}}</td>
         <td><span class="chip tag">{{.Tag}}</span></td>
         <td>
-          <form method="post" action="{{$.UIPath}}/rules" style="display:inline;">
+          <form method="post" action="rules" style="display:inline;">
             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
             <input type="hidden" name="action" value="toggle">
             <input type="hidden" name="id" value="{{.ID}}">
@@ -169,7 +172,7 @@
         <td>{{.Hits}}</td>
         <td class="muted">{{.Note}}</td>
         <td>
-          <form method="post" action="{{$.UIPath}}/rules" style="display:inline;" onsubmit="return confirm('Regel löschen?');">
+          <form method="post" action="rules" style="display:inline;" onsubmit="return confirm('Regel löschen?');">
             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
             <input type="hidden" name="action" value="delete">
             <input type="hidden" name="id" value="{{.ID}}">
@@ -188,7 +191,7 @@
 <div class="card">
   <h3 style="margin-top:0;">Domain einem oder mehreren Tags zuweisen</h3>
   <p class="hint">Nur Domains, die hier eingetragen sind, werden von diesem Plugin überhaupt geprüft (unabhängig vom Zoraxy-Tag, siehe Übersicht).</p>
-  <form method="post" action="{{.UIPath}}/domains">
+  <form method="post" action="domains">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <input type="hidden" name="action" value="set">
     <div class="row">
@@ -222,7 +225,7 @@
         <td class="mono">{{.Domain}}</td>
         <td>{{range .Tags}}<span class="chip tag">{{.}}</span>{{end}}</td>
         <td>
-          <form method="post" action="{{$.UIPath}}/domains" style="display:inline;" onsubmit="return confirm('Domain-Zuweisung löschen?');">
+          <form method="post" action="domains" style="display:inline;" onsubmit="return confirm('Domain-Zuweisung löschen?');">
             <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
             <input type="hidden" name="action" value="delete">
             <input type="hidden" name="domain" value="{{.Domain}}">
@@ -245,7 +248,7 @@
     Die heruntergeladene JSON-Datei hier einfügen oder hochladen. Im nächsten Schritt wählst du pro Zeile
     (oder für alle zusammen) einen Tag und den Match-Typ — Regeln und Domain-Zuweisung werden erst danach angelegt.
   </p>
-  <form method="post" action="{{.UIPath}}/import" enctype="multipart/form-data">
+  <form method="post" action="import" enctype="multipart/form-data">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <input type="hidden" name="step" value="preview">
     <label>JSON-Datei</label>
@@ -263,7 +266,7 @@
 <div class="card">
   <h3 style="margin-top:0;">Tags zuweisen und übernehmen ({{len .Rows}} Einträge)</h3>
   {{if .SkippedCount}}<p class="hint">{{.SkippedCount}} Einträge übersprungen (ungültig/leer).</p>{{end}}
-  <form method="post" action="{{.UIPath}}/import">
+  <form method="post" action="import">
     <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <input type="hidden" name="step" value="apply">
     <div class="row" style="margin-bottom:6px;">
@@ -314,7 +317,7 @@
     </table>
     <div style="margin-top:14px;">
       <button class="primary" type="submit">Regeln übernehmen &amp; Domains taggen</button>
-      <a href="{{.UIPath}}/import" class="btn" style="margin-left:8px;">Abbrechen</a>
+      <a href="import" class="btn" style="margin-left:8px;">Abbrechen</a>
     </div>
   </form>
 </div>

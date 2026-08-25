@@ -24,6 +24,14 @@ const EnableTag = "zoraxy-guard-blocker"
 
 const maxImportBody = 2 << 20 // 2 MiB
 
+// Zoraxy serves the plugin UI under /plugin.ui/<plugin-id>/ui/, so redirect
+// targets must stay relative to the UI root instead of using uiPath.
+const (
+	pageRules   = "rules"
+	pageDomains = "domains"
+	pageImport  = "import"
+)
+
 //go:embed www/ui.tmpl
 var uiTemplateSource string
 
@@ -72,7 +80,6 @@ func (s *Service) registerRoutes() {
 type layoutData struct {
 	Title     string
 	Active    string
-	UIPath    string
 	CSRFToken string
 	Flash     string
 	FlashKind string
@@ -88,7 +95,6 @@ func (s *Service) render(w http.ResponseWriter, r *http.Request, active, title, 
 	ld := layoutData{
 		Title:     title,
 		Active:    active,
-		UIPath:    uiPath,
 		CSRFToken: r.Header.Get("X-Zoraxy-Csrf"),
 		Flash:     flash,
 		FlashKind: flashKind,
@@ -102,7 +108,14 @@ func (s *Service) render(w http.ResponseWriter, r *http.Request, active, title, 
 }
 
 func (s *Service) handleUIRoot(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != uiPath+"/" && r.URL.Path != uiPath {
+	switch r.URL.Path {
+	case uiPath + "/":
+	case uiPath:
+		// Without the trailing slash the page's relative links would resolve
+		// one level above the plugin UI root, so canonicalise first.
+		http.Redirect(w, r, strings.TrimPrefix(uiPath, "/")+"/", http.StatusMovedPermanently)
+		return
+	default:
 		http.NotFound(w, r)
 		return
 	}
@@ -159,12 +172,11 @@ func (s *Service) handleUIRoot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := struct {
-		UIPath       string
 		EnableTag    string
 		Tags         []Tag
 		TagSummaries []tagSummary
 		RecentHits   []recentHit
-	}{uiPath, EnableTag, tags, summaries, recent}
+	}{EnableTag, tags, summaries, recent}
 	s.render(w, r, "dashboard", "Übersicht", "dashboard", data, flashFromQuery(r), flashKindFromQuery(r))
 }
 
@@ -194,11 +206,10 @@ func (s *Service) handleRules(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := struct {
-		UIPath    string
 		CSRFToken string
 		Tags      []Tag
 		Rules     []PathRule
-	}{uiPath, r.Header.Get("X-Zoraxy-Csrf"), s.store.Tags(), s.store.Rules()}
+	}{r.Header.Get("X-Zoraxy-Csrf"), s.store.Tags(), s.store.Rules()}
 	s.render(w, r, "rules", "Pfad-Regeln", "rules", data, flashFromQuery(r), flashKindFromQuery(r))
 }
 
@@ -222,10 +233,10 @@ func (s *Service) handleRulesPost(w http.ResponseWriter, r *http.Request) {
 			rule.MatchType = MatchExact
 		}
 		if _, err := s.store.AddRule(rule); err != nil {
-			redirectWithFlash(w, r, uiPath+"/rules", err.Error(), "error")
+			redirectWithFlash(w, r, pageRules, err.Error(), "error")
 			return
 		}
-		redirectWithFlash(w, r, uiPath+"/rules", "Regel hinzugefügt.", "ok")
+		redirectWithFlash(w, r, pageRules, "Regel hinzugefügt.", "ok")
 	case "toggle":
 		id := r.FormValue("id")
 		err := s.store.UpdateRule(id, func(pr *PathRule) error {
@@ -233,16 +244,16 @@ func (s *Service) handleRulesPost(w http.ResponseWriter, r *http.Request) {
 			return nil
 		})
 		if err != nil {
-			redirectWithFlash(w, r, uiPath+"/rules", err.Error(), "error")
+			redirectWithFlash(w, r, pageRules, err.Error(), "error")
 			return
 		}
-		redirectWithFlash(w, r, uiPath+"/rules", "Regel aktualisiert.", "ok")
+		redirectWithFlash(w, r, pageRules, "Regel aktualisiert.", "ok")
 	case "delete":
 		if err := s.store.DeleteRule(r.FormValue("id")); err != nil {
-			redirectWithFlash(w, r, uiPath+"/rules", err.Error(), "error")
+			redirectWithFlash(w, r, pageRules, err.Error(), "error")
 			return
 		}
-		redirectWithFlash(w, r, uiPath+"/rules", "Regel gelöscht.", "ok")
+		redirectWithFlash(w, r, pageRules, "Regel gelöscht.", "ok")
 	default:
 		http.Error(w, "unknown action", http.StatusBadRequest)
 	}
@@ -258,11 +269,10 @@ func (s *Service) handleDomains(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := struct {
-		UIPath    string
 		CSRFToken string
 		Tags      []Tag
 		Domains   []DomainTags
-	}{uiPath, r.Header.Get("X-Zoraxy-Csrf"), s.store.Tags(), s.store.DomainTags()}
+	}{r.Header.Get("X-Zoraxy-Csrf"), s.store.Tags(), s.store.DomainTags()}
 	s.render(w, r, "domains", "Domains", "domains", data, flashFromQuery(r), flashKindFromQuery(r))
 }
 
@@ -275,16 +285,16 @@ func (s *Service) handleDomainsPost(w http.ResponseWriter, r *http.Request) {
 	case "set":
 		tags := strings.Split(r.FormValue("tags"), ",")
 		if err := s.store.SetDomainTags(r.FormValue("domain"), tags); err != nil {
-			redirectWithFlash(w, r, uiPath+"/domains", err.Error(), "error")
+			redirectWithFlash(w, r, pageDomains, err.Error(), "error")
 			return
 		}
-		redirectWithFlash(w, r, uiPath+"/domains", "Domain gespeichert.", "ok")
+		redirectWithFlash(w, r, pageDomains, "Domain gespeichert.", "ok")
 	case "delete":
 		if err := s.store.DeleteDomain(r.FormValue("domain")); err != nil {
-			redirectWithFlash(w, r, uiPath+"/domains", err.Error(), "error")
+			redirectWithFlash(w, r, pageDomains, err.Error(), "error")
 			return
 		}
-		redirectWithFlash(w, r, uiPath+"/domains", "Domain entfernt.", "ok")
+		redirectWithFlash(w, r, pageDomains, "Domain entfernt.", "ok")
 	default:
 		http.Error(w, "unknown action", http.StatusBadRequest)
 	}
@@ -297,9 +307,8 @@ func (s *Service) handleDomainsPost(w http.ResponseWriter, r *http.Request) {
 func (s *Service) handleImport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		data := struct {
-			UIPath    string
 			CSRFToken string
-		}{uiPath, r.Header.Get("X-Zoraxy-Csrf")}
+		}{r.Header.Get("X-Zoraxy-Csrf")}
 		s.render(w, r, "import", "Import", "import_form", data, flashFromQuery(r), flashKindFromQuery(r))
 		return
 	}
@@ -318,25 +327,24 @@ func (s *Service) handleImport(w http.ResponseWriter, r *http.Request) {
 	case "preview":
 		raw, err := readImportPayload(r)
 		if err != nil {
-			redirectWithFlash(w, r, uiPath+"/import", err.Error(), "error")
+			redirectWithFlash(w, r, pageImport, err.Error(), "error")
 			return
 		}
 		rows, skipped, err := parseImportPayload(raw)
 		if err != nil {
-			redirectWithFlash(w, r, uiPath+"/import", err.Error(), "error")
+			redirectWithFlash(w, r, pageImport, err.Error(), "error")
 			return
 		}
 		if len(rows) == 0 {
-			redirectWithFlash(w, r, uiPath+"/import", "Keine gültigen Einträge in der Datei gefunden.", "error")
+			redirectWithFlash(w, r, pageImport, "Keine gültigen Einträge in der Datei gefunden.", "error")
 			return
 		}
 		data := struct {
-			UIPath       string
 			CSRFToken    string
 			Tags         []Tag
 			Rows         []importRow
 			SkippedCount int
-		}{uiPath, r.Header.Get("X-Zoraxy-Csrf"), s.store.Tags(), rows, skipped}
+		}{r.Header.Get("X-Zoraxy-Csrf"), s.store.Tags(), rows, skipped}
 		s.render(w, r, "import", "Import — Tags zuweisen", "import_preview", data, "", "")
 	case "apply":
 		if err := r.ParseForm(); err != nil {
@@ -348,7 +356,7 @@ func (s *Service) handleImport(w http.ResponseWriter, r *http.Request) {
 		tags := r.Form["tag"]
 		matches := r.Form["match_type"]
 		if len(domains) != len(paths) || len(domains) != len(tags) || len(domains) != len(matches) {
-			redirectWithFlash(w, r, uiPath+"/import", "Formular unvollständig — bitte erneut importieren.", "error")
+			redirectWithFlash(w, r, pageImport, "Formular unvollständig — bitte erneut importieren.", "error")
 			return
 		}
 		added := 0
@@ -371,7 +379,7 @@ func (s *Service) handleImport(w http.ResponseWriter, r *http.Request) {
 			}
 			added++
 		}
-		redirectWithFlash(w, r, uiPath+"/rules", fmt.Sprintf("%d Regel(n) aus Import übernommen.", added), "ok")
+		redirectWithFlash(w, r, pageRules, fmt.Sprintf("%d Regel(n) aus Import übernommen.", added), "ok")
 	default:
 		http.Error(w, "unknown step", http.StatusBadRequest)
 	}
