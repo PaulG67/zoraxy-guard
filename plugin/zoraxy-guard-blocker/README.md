@@ -81,7 +81,32 @@ Zeilen zugleich) ein Tag und ein Match-Typ zugewiesen; erst danach werden
 Regel **und** Domain-Tag-Zuordnung gemeinsam angelegt. Bereits vorhandene
 Tag-Zuweisungen einer Domain werden dabei ergänzt, nicht überschrieben.
 
-## Bauen
+## Fertige Binaries (kein Go/Docker nötig)
+
+Jeder Push auf `main`, der diesen Plugin-Ordner verändert, baut automatisch
+(GitHub Actions, [`.github/workflows/plugin-release.yml`](../../.github/workflows/plugin-release.yml))
+Binaries für Linux (amd64/arm64), Windows (amd64) und macOS (arm64) und
+veröffentlicht sie als rollende Release
+[**`zoraxy-guard-blocker-latest`**](https://github.com/PaulG67/zoraxy-guard/releases/tag/zoraxy-guard-blocker-latest) —
+bei jeder Änderung überschrieben, immer der aktuelle `main`-Stand. Direktlinks
+(Unraid x86 i. d. R. `linux_amd64`):
+
+```text
+https://github.com/PaulG67/zoraxy-guard/releases/download/zoraxy-guard-blocker-latest/zoraxy-guard-blocker_linux_amd64
+https://github.com/PaulG67/zoraxy-guard/releases/download/zoraxy-guard-blocker-latest/zoraxy-guard-blocker_linux_arm64
+https://github.com/PaulG67/zoraxy-guard/releases/download/zoraxy-guard-blocker-latest/zoraxy-guard-blocker_windows_amd64.exe
+https://github.com/PaulG67/zoraxy-guard/releases/download/zoraxy-guard-blocker-latest/zoraxy-guard-blocker_darwin_arm64
+```
+
+Jede Datei hat eine begleitende `.sha256`-Prüfsumme; `SHA256SUMS` enthält alle
+zusammen. Nach dem Herunterladen (z. B. per `wget`/`curl` direkt auf dem
+Unraid-Server) Datei in den Plugin-Unterordner legen und ausführbar machen:
+
+```sh
+chmod +x zoraxy-guard-blocker_linux_amd64
+```
+
+## Selbst bauen
 
 ```sh
 go build -trimpath -ldflags="-s -w" -o zoraxy-guard-blocker .
