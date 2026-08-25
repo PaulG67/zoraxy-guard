@@ -211,6 +211,17 @@
           'data-origin="' + escHtml(origin) + '" data-path="' + escHtml(path) + '" ' +
           'title="' + escHtml(checkUrl) + '">Prüfen ↗</a>'
         : "";
+      // block_export.js re-ticks these from its own selection map after we
+      // replace the list, so no state needs to be carried over here.
+      var exportPick = origin
+        ? '<label class="exp-pick" title="Für den Sperr-Plugin-Export markieren" onclick="event.stopPropagation();">' +
+          '<input type="checkbox" class="exp-check" data-domain="' + escHtml(origin) + '" ' +
+          'data-path="' + escHtml(path) + '" ' +
+          'data-status="' + (status != null ? status : "") + '" ' +
+          'data-method="' + escHtml(method || "GET") + '" ' +
+          'data-note="' + escHtml((a.risk && a.risk.title) || a.title || "") + '" ' +
+          'data-ts="' + (a.ts || "") + '"><span>Sperren</span></label>'
+        : "";
       var statusBadge =
         status != null
           ? '<span class="st-badge st-' + Math.floor(status / 100) + '">HTTP ' + status + "</span>"
@@ -266,6 +277,7 @@
         '<div class="alert-target-row">' +
         '<span class="alert-origin mono" title="Ziel-Host">' + escHtml(origin || "—") + "</span>" +
         checkLink +
+        exportPick +
         "</div>" +
         '<div class="alert-request-row mono">' +
         (method ? '<span class="alert-method">' + escHtml(method) + "</span>" : "") +

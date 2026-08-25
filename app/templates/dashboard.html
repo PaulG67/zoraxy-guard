@@ -168,6 +168,18 @@
     </label>
     <span class="hint">Geprüft-Markierungen bleiben in <code>/data/acks.json</code> (Container-Neustart ok).</span>
   </div>
+  <form id="export-form" method="post" action="{{ url_for('history_export_block') }}" class="export-bar">
+    <input type="hidden" name="payload" id="export-payload" value="[]">
+    <div class="soft-refresh-row">
+      <button type="submit" class="primary" id="export-submit" disabled>Markierte für Sperr-Plugin exportieren (0)</button>
+      <button type="button" id="export-select-all">Alle sichtbaren markieren</button>
+      <button type="button" id="export-select-none">Auswahl aufheben</button>
+      <span class="hint">
+        Hake bei einem Alarm «Sperren» an. Die Auswahl übersteht den Auto-Refresh und ergibt eine JSON-Datei
+        für den Import im <code>zoraxy-guard-blocker</code>-Plugin — keine Verbindung dorthin.
+      </span>
+    </div>
+  </form>
   <div id="alerts-live">
   {% if snap.recent_alerts %}
   <div class="alert-list">
@@ -184,6 +196,7 @@
   </div>
 </div>
 
+<script src="{{ url_for('static', filename='block_export.js') }}"></script>
 <script src="{{ url_for('static', filename='status_live.js') }}"></script>
 <script>
 (function () {

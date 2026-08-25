@@ -18,6 +18,18 @@
            data-origin="{{ a.origin or '' }}" data-path="{{ a.path or '/' }}"
            title="{{ a.check_url }}" onclick="event.stopPropagation();">Prüfen ↗</a>
       {% endif %}
+      {% if a.origin %}
+        <label class="exp-pick" title="Für den Sperr-Plugin-Export markieren" onclick="event.stopPropagation();">
+          <input type="checkbox" class="exp-check"
+                 data-domain="{{ a.origin }}"
+                 data-path="{{ a.path or '/' }}"
+                 data-status="{{ a.status if a.status is not none else '' }}"
+                 data-method="{{ a.method or 'GET' }}"
+                 data-note="{{ (a.risk.title if a.risk else a.title) or '' }}"
+                 data-ts="{{ a.ts or '' }}">
+          <span>Sperren</span>
+        </label>
+      {% endif %}
     </div>
     <div class="alert-request-row mono">
       {% if a.method %}<span class="alert-method">{{ a.method }}</span>{% endif %}

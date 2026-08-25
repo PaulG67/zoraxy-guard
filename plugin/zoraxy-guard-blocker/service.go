@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -23,6 +24,11 @@ import (
 const EnableTag = "zoraxy-guard-blocker"
 
 const maxImportBody = 2 << 20 // 2 MiB
+
+// uiRevision is shown in the UI footer. Bump it whenever the embedded UI
+// changes so a stale plugin binary on disk is immediately visible instead of
+// looking like a broken feature.
+const uiRevision = "2026-08-25 · csrf-header"
 
 // Zoraxy serves the plugin UI under /plugin.ui/<plugin-id>/ui/, so redirect
 // targets must stay relative to the UI root instead of using uiPath.
@@ -66,6 +72,7 @@ func (s *Service) registerRoutes() {
 	s.mux.HandleFunc(uiPath+"/rules", s.handleRules)
 	s.mux.HandleFunc(uiPath+"/domains", s.handleDomains)
 	s.mux.HandleFunc(uiPath+"/import", s.handleImport)
+	s.mux.HandleFunc(uiPath+"/selftest", s.handleSelftest)
 	s.mux.HandleFunc(sniffPath+"/", s.handleSniff)
 	s.mux.HandleFunc(capturePath+"/", s.handleCapture)
 	s.mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -81,6 +88,7 @@ type layoutData struct {
 	Title     string
 	Active    string
 	CSRFToken string
+	Revision  string
 	Flash     string
 	FlashKind string
 	Content   template.HTML
@@ -96,6 +104,7 @@ func (s *Service) render(w http.ResponseWriter, r *http.Request, active, title, 
 		Title:     title,
 		Active:    active,
 		CSRFToken: r.Header.Get("X-Zoraxy-Csrf"),
+		Revision:  uiRevision,
 		Flash:     flash,
 		FlashKind: flashKind,
 		Content:   template.HTML(body.String()),
@@ -180,6 +189,57 @@ func (s *Service) handleUIRoot(w http.ResponseWriter, r *http.Request) {
 	s.render(w, r, "dashboard", "Übersicht", "dashboard", data, flashFromQuery(r), flashKindFromQuery(r))
 }
 
+// handleSelftest answers a POST from the UI with a plain-text report of what
+// actually arrived. Anything between the browser and this plugin — Zoraxy's
+// CSRF middleware, its reverse proxy, a stale binary — shows up here, so a
+// failing form can be diagnosed without browser developer tools.
+func (s *Service) handleSelftest(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		http.Error(w, "nur POST", http.StatusMethodNotAllowed)
+		return
+	}
+
+	body, readErr := io.ReadAll(io.LimitReader(r.Body, 8<<10))
+	form, parseErr := url.ParseQuery(string(body))
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "Plugin-Build:    %s\n", uiRevision)
+	fmt.Fprintf(&b, "Anfrage:         %s %s\n", r.Method, r.URL.Path)
+	fmt.Fprintf(&b, "Content-Type:    %q\n", r.Header.Get("Content-Type"))
+	fmt.Fprintf(&b, "Content-Length:  %d\n", r.ContentLength)
+	fmt.Fprintf(&b, "Gelesene Bytes:  %d\n", len(body))
+	fmt.Fprintf(&b, "Body:            %q\n", string(body))
+	if readErr != nil {
+		fmt.Fprintf(&b, "Body-Lesefehler: %v\n", readErr)
+	}
+	if parseErr != nil {
+		fmt.Fprintf(&b, "Body-Parsefehler: %v\n", parseErr)
+	} else {
+		fmt.Fprintf(&b, "Feld \"probe\":    %q\n", form.Get("probe"))
+	}
+	fmt.Fprintf(&b, "X-Zoraxy-Csrf:   %s\n", describeSecret(r.Header.Get("X-Zoraxy-Csrf")))
+	fmt.Fprintf(&b, "Datendatei:      %s\n", s.store.Path())
+	if err := s.store.WriteCheck(); err != nil {
+		fmt.Fprintf(&b, "Schreibtest:     FEHLER — %v\n", err)
+	} else {
+		b.WriteString("Schreibtest:     ok\n")
+	}
+	fmt.Fprintf(&b, "Regeln/Domains:  %d / %d\n", len(s.store.Rules()), len(s.store.DomainTags()))
+
+	log.Printf("selftest: %d body bytes, csrf header %s", len(body), describeSecret(r.Header.Get("X-Zoraxy-Csrf")))
+	_, _ = w.Write([]byte(b.String()))
+}
+
+func describeSecret(v string) string {
+	if v == "" {
+		return "fehlt"
+	}
+	return fmt.Sprintf("vorhanden (%d Zeichen)", len(v))
+}
+
 func flashFromQuery(r *http.Request) string { return r.URL.Query().Get("flash") }
 func flashKindFromQuery(r *http.Request) string {
 	if k := r.URL.Query().Get("flash_kind"); k != "" {
@@ -214,10 +274,12 @@ func (s *Service) handleRules(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) handleRulesPost(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
-		http.Error(w, "invalid form", http.StatusBadRequest)
+		log.Printf("rules POST: form parse failed: %v", err)
+		http.Error(w, "Formular konnte nicht gelesen werden: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 	action := r.FormValue("action")
+	log.Printf("rules POST: action=%q fields=%d", action, len(r.PostForm))
 	switch action {
 	case "add":
 		rule := PathRule{
@@ -232,9 +294,11 @@ func (s *Service) handleRulesPost(w http.ResponseWriter, r *http.Request) {
 			rule.MatchType = MatchExact
 		}
 		if _, err := s.store.AddRule(rule); err != nil {
+			log.Printf("rules POST: add %q failed: %v", rule.Path, err)
 			redirectWithFlash(w, r, pageRules, err.Error(), "error")
 			return
 		}
+		log.Printf("rules POST: added %q (tag %q)", rule.Path, rule.Tag)
 		redirectWithFlash(w, r, pageRules, "Regel hinzugefügt.", "ok")
 	case "toggle":
 		id := r.FormValue("id")
@@ -254,7 +318,7 @@ func (s *Service) handleRulesPost(w http.ResponseWriter, r *http.Request) {
 		}
 		redirectWithFlash(w, r, pageRules, "Regel gelöscht.", "ok")
 	default:
-		http.Error(w, "unknown action", http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("unbekannte Aktion %q — das Formular kam ohne Inhalt an", action), http.StatusBadRequest)
 	}
 }
 
@@ -294,7 +358,7 @@ func (s *Service) handleDomainsPost(w http.ResponseWriter, r *http.Request) {
 		}
 		redirectWithFlash(w, r, pageDomains, "Domain entfernt.", "ok")
 	default:
-		http.Error(w, "unknown action", http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("unbekannte Aktion %q — das Formular kam ohne Inhalt an", r.FormValue("action")), http.StatusBadRequest)
 	}
 }
 

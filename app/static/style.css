@@ -228,6 +228,34 @@ th { color: var(--muted); font-weight: 600; font-size: 0.78rem; text-transform: 
   padding: 3px 8px;
   font-size: 0.75rem;
 }
+.exp-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  padding: 4px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.exp-pick input {
+  width: auto;
+  margin: 0;
+  accent-color: var(--warn);
+}
+.exp-pick:hover {
+  color: var(--text);
+  border-color: var(--warn);
+}
+.export-bar {
+  margin-bottom: 10px;
+}
+.export-bar .hint {
+  flex: 1 1 260px;
+}
 .alert-request-row {
   display: flex;
   flex-wrap: wrap;

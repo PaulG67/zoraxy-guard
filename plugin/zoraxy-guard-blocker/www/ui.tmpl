@@ -44,6 +44,8 @@
   .badge-off { color:var(--muted); }
   .setup-box { border-left:3px solid var(--warn); padding-left:12px; }
   select.tag-pick { margin-top:6px; font-size:0.82rem; color:var(--muted); }
+  .foot { margin-top:24px; padding-top:12px; border-top:1px solid var(--border); display:flex; align-items:center; gap:12px; flex-wrap:wrap; font-size:0.82rem; }
+  .foot pre { flex-basis:100%; margin:0; background:#0e131e; border:1px solid var(--border); border-radius:7px; padding:10px 12px; overflow:auto; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:0.78rem; white-space:pre-wrap; }
 </style>
 </head>
 <body>
@@ -59,6 +61,11 @@
   </header>
   {{if .Flash}}<div class="flash {{.FlashKind}}">{{.Flash}}</div>{{end}}
   {{.Content}}
+  <footer class="foot">
+    <span class="muted">Plugin-Build {{.Revision}}</span>
+    <button type="button" id="diag-run">Diagnose</button>
+    <pre id="diag-out" hidden></pre>
+  </footer>
 </div>
 <script>
 (function () {
@@ -86,30 +93,61 @@
     if ((form.method || 'get').toLowerCase() !== 'post') return;
     ev.preventDefault();
 
-    var data = new FormData(form);
-    var hasUpload = false;
-    data.forEach(function (value) {
-      if (value instanceof File && value.name !== '') hasUpload = true;
-    });
+    try {
+      var data = new FormData(form);
+      var hasUpload = false;
+      data.forEach(function (value) {
+        if (value instanceof File && value.name !== '') hasUpload = true;
+      });
 
-    fetch(form.action, {
+      fetch(form.action, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'X-CSRF-Token': csrfToken },
+        body: hasUpload ? data : new URLSearchParams(data)
+      }).then(function (res) {
+        if (!res.ok) {
+          return res.text().then(function (text) {
+            throw new Error('HTTP ' + res.status + ' — ' + text.slice(0, 300));
+          });
+        }
+        if (res.redirected) {
+          window.location.assign(res.url);
+          return;
+        }
+        return res.text().then(function (html) {
+          document.open('text/html', 'replace');
+          document.write(html);
+          document.close();
+        });
+      }).catch(function (err) {
+        showError('Speichern fehlgeschlagen: ' + err.message);
+      });
+    } catch (err) {
+      showError('Absenden fehlgeschlagen: ' + err.message);
+    }
+  });
+
+  var diagBtn = document.getElementById('diag-run');
+  if (diagBtn) diagBtn.addEventListener('click', function () {
+    var out = document.getElementById('diag-out');
+    out.hidden = false;
+    out.textContent = 'läuft…';
+    fetch('selftest', {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'X-CSRF-Token': csrfToken },
-      body: hasUpload ? data : new URLSearchParams(data)
+      body: new URLSearchParams({ probe: 'hallo-welt' })
     }).then(function (res) {
-      if (!res.ok) throw new Error('Zoraxy antwortete mit HTTP ' + res.status);
-      if (res.redirected) {
-        window.location.assign(res.url);
-        return;
-      }
-      return res.text().then(function (html) {
-        document.open('text/html', 'replace');
-        document.write(html);
-        document.close();
+      return res.text().then(function (text) {
+        out.textContent =
+          'HTTP ' + res.status + ' ' + res.statusText + '\n' +
+          'Ziel: ' + res.url + '\n' +
+          'Token im Browser: ' + (csrfToken ? csrfToken.length + ' Zeichen' : 'FEHLT') + '\n' +
+          '----------------\n' + text.slice(0, 4000);
       });
     }).catch(function (err) {
-      showError('Speichern fehlgeschlagen: ' + err.message);
+      out.textContent = 'Verbindung fehlgeschlagen: ' + err.message;
     });
   });
 

@@ -107,6 +107,18 @@ func (s *Store) load() error {
 	return nil
 }
 
+// Path is the data file this store persists to.
+func (s *Store) Path() string { return s.path }
+
+// WriteCheck rewrites the data file from the current in-memory state. It
+// exists so the UI self-test can prove the file is genuinely writable
+// instead of only reporting its path.
+func (s *Store) WriteCheck() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.saveLocked()
+}
+
 func (s *Store) saveLocked() error {
 	raw, err := json.MarshalIndent(s.data, "", "  ")
 	if err != nil {

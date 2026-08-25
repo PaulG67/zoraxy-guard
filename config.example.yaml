@@ -160,12 +160,6 @@ crowdsec:
   bouncer_config: /crowdsec-bouncer/config.yaml
   # lapi_url: http://192.168.1.10:8080         # optional, wenn Guard «crowdsec» nicht auflöst
 
-# "Sperren"-Export für das Zoraxy-Guard-Blocker-Plugin (siehe plugin/zoraxy-guard-blocker/).
-# Aktiviert Checkboxen + Export-Button bei Handlungsbedarf-Einträgen in der History.
-# Export ist eine JSON-Datei zum manuellen Import im Plugin — keine Netzwerkverbindung dorthin.
-block_export:
-  enabled: false
-
 state_file: /data/state.json
 
 # Access history (Web-UI only, RAM ring — never written to disk)
