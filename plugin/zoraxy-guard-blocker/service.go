@@ -206,10 +206,9 @@ func (s *Service) handleRules(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := struct {
-		CSRFToken string
-		Tags      []Tag
-		Rules     []PathRule
-	}{r.Header.Get("X-Zoraxy-Csrf"), s.store.Tags(), s.store.Rules()}
+		Tags  []Tag
+		Rules []PathRule
+	}{s.store.Tags(), s.store.Rules()}
 	s.render(w, r, "rules", "Pfad-Regeln", "rules", data, flashFromQuery(r), flashKindFromQuery(r))
 }
 
@@ -269,10 +268,9 @@ func (s *Service) handleDomains(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := struct {
-		CSRFToken string
-		Tags      []Tag
-		Domains   []DomainTags
-	}{r.Header.Get("X-Zoraxy-Csrf"), s.store.Tags(), s.store.DomainTags()}
+		Tags    []Tag
+		Domains []DomainTags
+	}{s.store.Tags(), s.store.DomainTags()}
 	s.render(w, r, "domains", "Domains", "domains", data, flashFromQuery(r), flashKindFromQuery(r))
 }
 
@@ -306,10 +304,7 @@ func (s *Service) handleDomainsPost(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) handleImport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		data := struct {
-			CSRFToken string
-		}{r.Header.Get("X-Zoraxy-Csrf")}
-		s.render(w, r, "import", "Import", "import_form", data, flashFromQuery(r), flashKindFromQuery(r))
+		s.render(w, r, "import", "Import", "import_form", nil, flashFromQuery(r), flashKindFromQuery(r))
 		return
 	}
 
@@ -340,11 +335,10 @@ func (s *Service) handleImport(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data := struct {
-			CSRFToken    string
 			Tags         []Tag
 			Rows         []importRow
 			SkippedCount int
-		}{r.Header.Get("X-Zoraxy-Csrf"), s.store.Tags(), rows, skipped}
+		}{s.store.Tags(), rows, skipped}
 		s.render(w, r, "import", "Import — Tags zuweisen", "import_preview", data, "", "")
 	case "apply":
 		if err := r.ParseForm(); err != nil {

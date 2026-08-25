@@ -7,6 +7,7 @@
 <!-- Zoraxy proxies this UI under /plugin.ui/<plugin-id>/ui/, so every link and
      form action below must stay relative to this base. -->
 <base href="./">
+<meta name="zoraxy-csrf" content="{{.CSRFToken}}">
 <title>{{.Title}} · Zoraxy Guard Blocker</title>
 <style>
   :root { --bg:#0f1420; --panel:#161d2d; --border:#28324a; --text:#e7ecf5; --muted:#8f9bb3; --accent:#5ec2a4; --warn:#f0b429; --err:#f07178; }
@@ -42,6 +43,7 @@
   .muted { color:var(--muted); }
   .badge-off { color:var(--muted); }
   .setup-box { border-left:3px solid var(--warn); padding-left:12px; }
+  select.tag-pick { margin-top:6px; font-size:0.82rem; color:var(--muted); }
 </style>
 </head>
 <body>
@@ -58,6 +60,78 @@
   {{if .Flash}}<div class="flash {{.FlashKind}}">{{.Flash}}</div>{{end}}
   {{.Content}}
 </div>
+<script>
+(function () {
+  var meta = document.querySelector('meta[name="zoraxy-csrf"]');
+  var csrfToken = meta ? meta.getAttribute('content') : '';
+
+  function showError(msg) {
+    var box = document.createElement('div');
+    box.className = 'flash error';
+    box.textContent = msg;
+    var wrap = document.querySelector('.wrap');
+    wrap.insertBefore(box, wrap.children[1]);
+    box.scrollIntoView({ block: 'nearest' });
+  }
+
+  // Zoraxy protects its whole web panel with gorilla/csrf, and this UI is
+  // proxied through it. A plain form POST fails twice over: the token would
+  // have to use gorilla's own field name, and reading it out of the body
+  // drains the body before the reverse proxy can forward it upstream. The
+  // X-CSRF-Token header is checked first and leaves the body intact.
+  document.addEventListener('submit', function (ev) {
+    if (ev.defaultPrevented) return;
+    var form = ev.target;
+    if (!form || form.tagName !== 'FORM') return;
+    if ((form.method || 'get').toLowerCase() !== 'post') return;
+    ev.preventDefault();
+
+    var data = new FormData(form);
+    var hasUpload = false;
+    data.forEach(function (value) {
+      if (value instanceof File && value.name !== '') hasUpload = true;
+    });
+
+    fetch(form.action, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'X-CSRF-Token': csrfToken },
+      body: hasUpload ? data : new URLSearchParams(data)
+    }).then(function (res) {
+      if (!res.ok) throw new Error('Zoraxy antwortete mit HTTP ' + res.status);
+      if (res.redirected) {
+        window.location.assign(res.url);
+        return;
+      }
+      return res.text().then(function (html) {
+        document.open('text/html', 'replace');
+        document.write(html);
+        document.close();
+      });
+    }).catch(function (err) {
+      showError('Speichern fehlgeschlagen: ' + err.message);
+    });
+  });
+
+  // Dropdowns marked .tag-pick copy an existing tag into their text field so
+  // tags stay consistent without having to retype them.
+  document.addEventListener('change', function (ev) {
+    var picker = ev.target;
+    if (!picker.classList || !picker.classList.contains('tag-pick')) return;
+    var input = document.getElementById(picker.getAttribute('data-target'));
+    if (!input || !picker.value) return;
+    if (picker.getAttribute('data-append') === '1') {
+      var current = input.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+      if (current.indexOf(picker.value) === -1) current.push(picker.value);
+      input.value = current.join(', ');
+    } else {
+      input.value = picker.value;
+    }
+    picker.value = '';
+    input.focus();
+  });
+})();
+</script>
 </body>
 </html>
 {{end}}
@@ -116,7 +190,6 @@
 <div class="card">
   <h3 style="margin-top:0;">Neue Pfad-Regel (manueller Eintrag)</h3>
   <form method="post" action="rules">
-    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <input type="hidden" name="action" value="add">
     <div class="row">
       <div>
@@ -133,7 +206,13 @@
       </div>
       <div>
         <label>Tag</label>
-        <input type="text" name="tag" list="known-tags" placeholder="dotfiles" required>
+        <input type="text" name="tag" id="rule-tag" list="known-tags" placeholder="dotfiles" required>
+        {{if .Tags}}
+        <select class="tag-pick" data-target="rule-tag">
+          <option value="">— bestehenden Tag übernehmen —</option>
+          {{range .Tags}}<option value="{{.Name}}">{{.Name}}</option>{{end}}
+        </select>
+        {{end}}
       </div>
       <div>
         <label>Notiz (optional)</label>
@@ -163,7 +242,6 @@
         <td><span class="chip tag">{{.Tag}}</span></td>
         <td>
           <form method="post" action="rules" style="display:inline;">
-            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
             <input type="hidden" name="action" value="toggle">
             <input type="hidden" name="id" value="{{.ID}}">
             <button type="submit">{{if .Enabled}}aktiv – deaktivieren{{else}}inaktiv – aktivieren{{end}}</button>
@@ -173,7 +251,6 @@
         <td class="muted">{{.Note}}</td>
         <td>
           <form method="post" action="rules" style="display:inline;" onsubmit="return confirm('Regel löschen?');">
-            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
             <input type="hidden" name="action" value="delete">
             <input type="hidden" name="id" value="{{.ID}}">
             <button type="submit" class="danger">Löschen</button>
@@ -192,7 +269,6 @@
   <h3 style="margin-top:0;">Domain einem oder mehreren Tags zuweisen</h3>
   <p class="hint">Nur Domains, die hier eingetragen sind, werden von diesem Plugin überhaupt geprüft (unabhängig vom Zoraxy-Tag, siehe Übersicht).</p>
   <form method="post" action="domains">
-    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <input type="hidden" name="action" value="set">
     <div class="row">
       <div>
@@ -201,7 +277,13 @@
       </div>
       <div>
         <label>Tags (Komma-getrennt)</label>
-        <input type="text" name="tags" list="known-tags" placeholder="dotfiles, secrets" required>
+        <input type="text" name="tags" id="domain-tags" list="known-tags" placeholder="dotfiles, secrets" required>
+        {{if .Tags}}
+        <select class="tag-pick" data-target="domain-tags" data-append="1">
+          <option value="">— bestehenden Tag hinzufügen —</option>
+          {{range .Tags}}<option value="{{.Name}}">{{.Name}}</option>{{end}}
+        </select>
+        {{end}}
       </div>
       <div style="flex:0;">
         <label>&nbsp;</label>
@@ -226,7 +308,6 @@
         <td>{{range .Tags}}<span class="chip tag">{{.}}</span>{{end}}</td>
         <td>
           <form method="post" action="domains" style="display:inline;" onsubmit="return confirm('Domain-Zuweisung löschen?');">
-            <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
             <input type="hidden" name="action" value="delete">
             <input type="hidden" name="domain" value="{{.Domain}}">
             <button type="submit" class="danger">Löschen</button>
@@ -249,7 +330,6 @@
     (oder für alle zusammen) einen Tag und den Match-Typ — Regeln und Domain-Zuweisung werden erst danach angelegt.
   </p>
   <form method="post" action="import" enctype="multipart/form-data">
-    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <input type="hidden" name="step" value="preview">
     <label>JSON-Datei</label>
     <input type="file" name="file" accept="application/json">
@@ -267,12 +347,17 @@
   <h3 style="margin-top:0;">Tags zuweisen und übernehmen ({{len .Rows}} Einträge)</h3>
   {{if .SkippedCount}}<p class="hint">{{.SkippedCount}} Einträge übersprungen (ungültig/leer).</p>{{end}}
   <form method="post" action="import">
-    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
     <input type="hidden" name="step" value="apply">
     <div class="row" style="margin-bottom:6px;">
       <div>
         <label>Tag für alle markierten Zeilen setzen</label>
         <input type="text" id="bulk-tag" list="known-tags" placeholder="dotfiles">
+        {{if .Tags}}
+        <select class="tag-pick" data-target="bulk-tag">
+          <option value="">— bestehenden Tag übernehmen —</option>
+          {{range .Tags}}<option value="{{.Name}}">{{.Name}}</option>{{end}}
+        </select>
+        {{end}}
       </div>
       <div>
         <label>Match-Typ für alle markierten Zeilen setzen</label>
