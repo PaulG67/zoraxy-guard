@@ -3,6 +3,7 @@ FROM python:3.12-slim
 LABEL org.opencontainers.image.title="zoraxy-guard"
 LABEL org.opencontainers.image.description="Zoraxy log monitor with threat list alerts"
 LABEL org.opencontainers.image.source="https://github.com/PaulG67/zoraxy-guard"
+LABEL net.unraid.docker.icon="https://raw.githubusercontent.com/PaulG67/zoraxy-guard/main/icon.png"
 
 WORKDIR /app
 

@@ -22,7 +22,7 @@ Image-only: Docker → Force Update. Neue Volumes kommen nur mit Edit → Apply.
   <Category>Security: Network:Other Tools: Productivity:</Category>
   <WebUI>http://[IP]:[PORT:8787]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/PaulG67/zoraxy-guard/main/unraid/my-zoraxy-guard.xml</TemplateURL>
-  <Icon>https://raw.githubusercontent.com/PaulG67/zoraxy-guard/main/unraid/icon.png</Icon>
+  <Icon>https://raw.githubusercontent.com/PaulG67/zoraxy-guard/main/icon.png</Icon>
   <ExtraParams/>
   <PostArgs/>
   <CPUset/>
